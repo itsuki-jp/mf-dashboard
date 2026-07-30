@@ -4,7 +4,7 @@
 
 セットアップは次の順番で進める。
 
-1. Money Forward MEと1Passwordを準備する
+1. Money Forward MEとSecret Providerを準備する
 2. Cloudflare Zero TrustとGoogle OAuthを準備する
 3. アプリとインフラの設定ファイルを作成する
 4. Terraformを適用する
@@ -13,7 +13,7 @@
 ## 必須要件
 
 - [Money Forward ME](https://moneyforward.com/)
-- [1Password](https://1password.com/jp)（Service Account）
+- [1Password](https://1password.com/jp)（Service Account）または[Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/)
 - [Cloudflare](https://www.cloudflare.com/ja-jp/)アカウント（Zero Trustを有効化済み）
 - 公開先FQDNのゾーンをCloudflareで管理していること
 - ローカルPCが常時起動できる環境
@@ -30,12 +30,13 @@ git clone https://github.com/hiroppy/mf-dashboard.git
 cd mf-dashboard
 ```
 
-## 1. Money Forward MEと1Passwordの準備
+## 1. Money Forward MEとSecret Providerの準備
 
 - Money Forward MEでワンタイムパスワードを設定する（[設定方法](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95)）
-- 1PasswordでService Accountを発行する（[設定方法](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account)）
+- 1Passwordを選ぶ場合はService Accountを発行する（[設定方法](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account)）
   - Private、Personal、Familyなど、最初から用意されている保管庫へService Accountはアクセスできない。Money Forward MEのアカウントを自分で作成した保管庫へ移し、Service Accountへアクセス権を付与する。
   - Money Forward MEのログイン項目に、標準の`username`と`password`フィールド、およびワンタイムパスワードのフィールドを用意する。crawlerはこれらのフィールドを1Password SDKから読み取る。
+- Bitwardenを選ぶ場合は、Secrets ManagerのProjectとread-only Machine Accountを作成し、username、password、固定のTOTPセットアップキーを個別のSecretとして登録する。tokenファイルとSecret IDの設定は手順3.1で行う。
 
 ## 2. Cloudflare Zero Trustの準備
 
@@ -155,6 +156,8 @@ chmod 600 secrets/bws-access-token
 
 ```dotenv
 SECRET_PROVIDER=bitwarden
+COMPOSE_PATH_SEPARATOR=:
+COMPOSE_FILE=compose.yml:compose.bitwarden.yml
 BWS_ACCESS_TOKEN_HOST_FILE=./secrets/bws-access-token
 BWS_USERNAME_SECRET_ID=<usernameのSecret ID>
 BWS_PASSWORD_SECRET_ID=<passwordのSecret ID>
@@ -163,11 +166,10 @@ BWS_TOTP_SECRET_ID=<TOTPセットアップキーのSecret ID>
 
 crawlerはtokenファイルを`/run/secrets/bws_access_token`としてread-onlyでmountし、`bws`子プロセスの`BWS_ACCESS_TOKEN`環境変数だけへ渡す。Access Token、取得したSecret値、`bws`のstdout/stderrはログへ出力しない。
 
-Bitwardenを選択した起動・検証では専用overrideを必ず重ねる。これにより1Password構成ではBitwarden tokenファイルを要求しない。
+Bitwardenを選択した場合は`COMPOSE_FILE`を`.env`へ設定し、専用overrideを以後のすべてのCompose操作へ自動適用する。これにより後段の`docker compose build`や`docker compose up -d`でもBitwarden設定が外れない。1Password構成では`COMPOSE_FILE`を設定しないため、Bitwarden tokenファイルを要求しない。
 
 ```sh
-docker compose -f compose.yml -f compose.bitwarden.yml config --quiet
-docker compose -f compose.yml -f compose.bitwarden.yml up -d
+docker compose config --quiet
 ```
 
 ### 3.2 インフラ設定
