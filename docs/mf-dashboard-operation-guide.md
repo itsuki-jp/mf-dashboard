@@ -742,7 +742,7 @@ overall: failed（全profile試行後）
 
 ## 18. 認証方式
 
-現在のCloudflare Access JWT前提を切り替えられるようにする。
+browser-facing APIの認証は`AUTH_MODE`で切り替える。
 
 ```dotenv
 AUTH_MODE=tailscale
@@ -930,7 +930,7 @@ curl -I http://127.0.0.1:8765
 Serveを設定する。
 
 ```bash
-tailscale serve --bg 8765
+tailscale serve --bg http://127.0.0.1:8765
 ```
 
 確認:

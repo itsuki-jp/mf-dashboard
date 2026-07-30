@@ -28,14 +28,18 @@ services:
       AI_API_KEY: ${AI_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
       AI_PROVIDER: ${AI_PROVIDER:-}
+      AUTH_MODE: ${AUTH_MODE:-cloudflare}
       CRAWLER_URL: http://crawler:8766
-      CLOUDFLARE_ACCESS_AUD: ${CLOUDFLARE_ACCESS_AUD:?Set CLOUDFLARE_ACCESS_AUD}
-      CLOUDFLARE_ACCESS_TEAM_DOMAIN: ${CLOUDFLARE_ACCESS_TEAM_DOMAIN:?Set CLOUDFLARE_ACCESS_TEAM_DOMAIN}
+      CLOUDFLARE_ACCESS_AUD: ${CLOUDFLARE_ACCESS_AUD:-}
+      CLOUDFLARE_ACCESS_TEAM_DOMAIN: ${CLOUDFLARE_ACCESS_TEAM_DOMAIN:-}
       DASHBOARD_URL: ${DASHBOARD_URL:?Set DASHBOARD_URL to the public dashboard URL}
       REFRESH_TOKEN: ${REFRESH_TOKEN:?Set REFRESH_TOKEN}
+      TAILSCALE_ALLOWED_LOGIN: ${TAILSCALE_ALLOWED_LOGIN:-}
       TZ: Asia/Tokyo
     volumes:
       - ./data:/app/data
+    ports:
+      - "127.0.0.1:8765:8765"
     expose:
       - "8765"
     restart: unless-stopped
@@ -48,6 +52,8 @@ services:
       - tunnel_token
     depends_on:
       - web
+    profiles:
+      - cloudflare
     restart: unless-stopped
 
   crawler:

@@ -101,23 +101,28 @@ openssl rand -hex 32
 ```dotenv
 COMPOSE_PATH_SEPARATOR=:
 COMPOSE_FILE=compose.yml:compose.bitwarden.yml
+COMPOSE_PROFILES=cloudflare
 BWS_ACCESS_TOKEN_HOST_FILE=./secrets/bws-access-token
 MF_PROFILES_CONFIG_PATH=./config/money-forward-profiles.json
 REFRESH_TOKEN=<openssl rand -hex 32の出力>
+AUTH_MODE=cloudflare
 CLOUDFLARE_ACCESS_TEAM_DOMAIN=<team-name>.cloudflareaccess.com
 DASHBOARD_URL=https://dashboard.example.com
 ```
 
-`REFRESH_TOKEN`はcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。`CLOUDFLARE_ACCESS_TEAM_DOMAIN`にはCloudflare Zero Trustで確認したTeam domainを指定する。`DASHBOARD_URL`には、このあとTerraformの`hostname`へ指定する公開URLを設定する。
+`REFRESH_TOKEN`はcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。Cloudflare構成では`AUTH_MODE=cloudflare`とし、`CLOUDFLARE_ACCESS_TEAM_DOMAIN`にはCloudflare Zero Trustで確認したTeam domainを指定する。Tailscale Serve構成では`AUTH_MODE=tailscale`と`TAILSCALE_ALLOWED_LOGIN=<本人のTailscale login>`を指定し、Cloudflare用2項目は空のままにする。`DASHBOARD_URL`には実際のダッシュボードURLを指定する。
 
-`CLOUDFLARE_ACCESS_AUD`はまだ空のままでよい。Access Applicationの作成後に確定するため、Terraform適用後の手順3.3で設定する。
+Cloudflare構成の`CLOUDFLARE_ACCESS_AUD`はAccess Applicationの作成後に確定するため、Terraform適用後の手順3.3で設定する。Tailscale構成では設定しない。
 
 | `.env`のキー                                 | 必須 | 設定タイミング       | 内容                                                                             |
 | -------------------------------------------- | ---- | -------------------- | -------------------------------------------------------------------------------- |
-| `REFRESH_TOKEN`                              | 必須 | Terraform適用前      | crawlerとwebが共有する内部API用Bearerトークン                                    |
-| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Terraform適用前      | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                       |
-| `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraform適用後      | Terraformが作成したAccess ApplicationのAUD                                       |
-| `DASHBOARD_URL`                              | 必須 | Terraform適用前      | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                   |
+| `REFRESH_TOKEN`                              | 必須 | Compose起動前        | crawlerとwebが共有する内部API用Bearerトークン                                    |
+| `AUTH_MODE`                                  | 必須 | Compose起動前        | `cloudflare`、`tailscale`、開発専用の`development`                               |
+| `COMPOSE_PROFILES`                           | 条件 | Compose起動前        | Cloudflare構成では`cloudflare`。Tailscale構成では設定しない                      |
+| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 条件 | Terraform適用前      | Cloudflare modeでのAccess JWT発行者                                              |
+| `CLOUDFLARE_ACCESS_AUD`                      | 条件 | Terraform適用後      | Cloudflare modeでTerraformが作成したAccess ApplicationのAUD                      |
+| `TAILSCALE_ALLOWED_LOGIN`                    | 条件 | Tailscale接続後      | Tailscale modeで許可する本人のlogin。Serveのidentity headerと完全一致させる      |
+| `DASHBOARD_URL`                              | 必須 | Compose起動前        | Open Graph / Twitter metadataと通知に使うダッシュボードURL                       |
 | `BWS_ACCESS_TOKEN_HOST_FILE`                 | 必須 | Compose起動前        | Machine Account tokenを保存したowner-read-onlyファイル                           |
 | `MF_PROFILES_CONFIG_PATH`                    | 必須 | crawler起動前        | Git管理対象外のMoney Forwardプロファイル設定JSON                                 |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 財務インサイト、家計AIチャット、LLMカテゴリ推論。利用する機能では3項目すべて必須 |
@@ -126,7 +131,7 @@ DASHBOARD_URL=https://dashboard.example.com
 | `HOST_UID` / `HOST_GID`                      | 任意 | Compose起動前        | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000`   |
 | `AUTH_STATE_ROOT`                            | 任意 | ローカル実行時       | profile別ブラウザーセッションを保存するroot。Docker Composeでは専用volumeを使う  |
 
-Linuxでは`id -u`と`id -g`で値を確認し、`1000:1000`と異なる場合は`.env`の`HOST_UID`と`HOST_GID`へ設定する。web、crawler、cloudflaredが同じUID/GIDで動作し、`./data`とowner-read-onlyのTunnel tokenへ必要な範囲だけアクセスする。
+Linuxでは`id -u`と`id -g`で値を確認し、`1000:1000`と異なる場合は`.env`の`HOST_UID`と`HOST_GID`へ設定する。web、crawler、Cloudflare profileを使う場合のcloudflaredが同じUID/GIDで動作する。
 
 #### Bitwarden Secrets Managerのtokenファイルを作成する
 
@@ -227,9 +232,9 @@ CLOUDFLARE_ACCESS_AUD=<上のコマンドで表示された値>
 ビルド前にComposeの設定を検証する。
 
 ```sh
-docker compose config --quiet
-docker compose build
-docker compose up -d
+docker compose --profile cloudflare config --quiet
+docker compose --profile cloudflare build
+docker compose --profile cloudflare up -d
 ```
 
 `docker compose config --quiet`が何も表示せず終了すれば、Composeが必要とする環境変数は設定済みである。`required variable ... is missing a value`と表示された場合は、メッセージに示されたキーが`.env`に存在し、`=`の右側が空でないことを確認する。
