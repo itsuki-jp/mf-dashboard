@@ -1067,13 +1067,7 @@ compose.yml
 自分のforkのGitリポジトリ
 ```
 
-任意:
-
-```text
-data/auth/*.json
-```
-
-auth-stateは漏洩するとセッション悪用につながるため、バックアップする場合は必ず暗号化する。バックアップせず、障害時に再ログインさせる方が単純。
+profile別auth-stateはcredential相当のため通常のバックアップ対象から除外し、crawler専用volumeだけに保持する。障害時は保存済みstateを使わず再ログインする。例外的にバックアップが必要な場合も、GitHub Actions cacheやGitへ保存せず、暗号化と厳格なアクセス制限を必須とする。
 
 Bitwardenシークレット自体はDBバックアップへ含めない。
 
@@ -1237,7 +1231,8 @@ redirect timeout
 6. CAPTCHAや追加認証なら自動再試行を止める
 
 ```bash
-mv data/auth/primary.json data/auth/primary.json.bak
+docker compose exec crawler \
+  mv -- /app/crawler-state/primary.json /app/crawler-state/primary.json.bak
 ```
 
 他プロファイルのauth-stateを削除しない。
