@@ -4,6 +4,7 @@ import type { getAccountsGroupedByCategory } from "@mf-dashboard/db";
 import { useState } from "react";
 import { AccountCard } from "../../components/info/account-card";
 import { Switch } from "../../components/ui/switch";
+import { createProfileScopeId } from "../../lib/profile-scope";
 
 type GroupedAccounts = Awaited<ReturnType<typeof getAccountsGroupedByCategory>>;
 
@@ -61,11 +62,15 @@ export function AccountListClient({ groupedAccounts, groupId }: AccountListClien
                     key={account.id}
                     mfId={account.mfId}
                     name={account.name}
+                    profileName={account.profileName}
                     type={account.type}
                     status={account.status}
                     lastUpdated={account.lastUpdated}
                     totalAssets={account.totalAssets}
-                    groupId={groupId}
+                    groupId={
+                      groupId ??
+                      (account.profileId ? createProfileScopeId(account.profileId) : undefined)
+                    }
                   />
                 ))}
               </div>

@@ -37,11 +37,12 @@ export async function AccountDetailContent({ id, groupId }: { id: string; groupI
 
   return (
     <PageLayout
-      title={account.name}
+      title={account.profileName ? `${account.name}（${account.profileName}）` : account.name}
       href={mfUrl}
       options={
         <>
           {account.type !== "手動" && <AccountStatusBadge status={account.status} />}
+          {account.profileName && <Badge variant="outline">{account.profileName}</Badge>}
           <Badge variant="outline">{account.categoryName}</Badge>
           {account.type !== "手動" && formatLastUpdated(account.lastUpdated, true) && (
             <span className="text-sm text-muted-foreground">

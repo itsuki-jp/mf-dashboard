@@ -1,5 +1,9 @@
-import { closeDb, initDb } from "@mf-dashboard/db";
-import { synchronizeMoneyForwardProfiles } from "@mf-dashboard/db/repository/profiles";
+import { closeDb, initDb, type Db } from "@mf-dashboard/db";
+import {
+  synchronizeMoneyForwardProfiles,
+  updateMoneyForwardProfileScrapeStatus,
+  type MoneyForwardProfileScrapeStatus,
+} from "@mf-dashboard/db/repository/profiles";
 import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import {
   handleCrawlerFailure,
@@ -21,6 +25,12 @@ import {
   type CrawlerProgressReporter,
 } from "./crawler-progress.js";
 import { error, info, warn } from "./logger.js";
+import {
+  createProfileCompletedStatus,
+  createProfileFailedStatus,
+  createProfileRunningStatus,
+  sliceProfileRunState,
+} from "./profile-run-status.js";
 import { createGroupScope } from "./scrapers/group.js";
 import { notifyWebRefresh } from "./web-refresh.js";
 
@@ -57,8 +67,10 @@ function createProfileProgressReporter(
   progress: CrawlerProgressReporter,
   profileId: string,
 ): CrawlerProgressReporter {
+  const timelineStartIndex = progress.getState().timeline.length;
   return {
     ...progress,
+    getState: () => sliceProfileRunState(progress.getState(), timelineStartIndex),
     startStep: (step, metadata) =>
       progress.startStep({ ...step, label: `[${profileId}] ${step.label}` }, metadata),
   };
@@ -75,6 +87,7 @@ async function runProfileCrawler(
   try {
     const activeRuntime = await runSetupPhase(config, profile);
     runtime = activeRuntime;
+    await recordProfileStatus(profile.id, createProfileRunningStatus(), activeRuntime.db);
     await runCrawlerStep(
       progress,
       CRAWLER_STEPS.authentication,
@@ -150,9 +163,23 @@ async function runProfileCrawler(
       error("Failed to refresh web cache:", err);
     }
 
+    await recordProfileStatus(
+      profile.id,
+      createProfileCompletedStatus(progress.getState(), new Date().toISOString()),
+      activeRuntime.db,
+    );
     info(`Completed Money Forward profile: ${profile.id}`);
   } catch (err) {
     await handleCrawlerFailure(err, runtime?.page, config);
+    try {
+      await recordProfileStatus(
+        profile.id,
+        createProfileFailedStatus(progress.getState(), err),
+        runtime?.db,
+      );
+    } catch (statusError) {
+      error(`Failed to record Money Forward profile ${profile.id} status:`, statusError);
+    }
     throw err;
   } finally {
     try {
@@ -163,4 +190,18 @@ async function runProfileCrawler(
       closeDb();
     }
   }
+}
+
+async function recordProfileStatus(
+  profileId: string,
+  status: MoneyForwardProfileScrapeStatus,
+  db?: Db,
+): Promise<void> {
+  if (db) {
+    await updateMoneyForwardProfileScrapeStatus(db, profileId, status);
+    return;
+  }
+
+  const ownedDb = await initDb();
+  await updateMoneyForwardProfileScrapeStatus(ownedDb, profileId, status);
 }

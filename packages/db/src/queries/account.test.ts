@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
+import { createProfileScopeId } from "../shared/group-filter";
 import {
   createTestDb,
   resetTestDb,
@@ -41,12 +42,16 @@ async function createTestAccount(data: {
   type?: string;
   isActive?: boolean;
   categoryId?: number | null;
+  profileId?: string;
+  groupId?: string;
 }): Promise<number> {
   const now = new Date().toISOString();
+  const profileId = data.profileId ?? "primary";
+  const groupId = data.groupId ?? TEST_GROUP_ID;
   const account = await db
     .insert(schema.accounts)
     .values({
-      profileId: "primary",
+      profileId,
       mfId: data.mfId,
       name: data.name,
       type: data.type ?? "bank",
@@ -61,8 +66,8 @@ async function createTestAccount(data: {
   await db
     .insert(schema.groupAccounts)
     .values({
-      profileId: "primary",
-      groupId: TEST_GROUP_ID,
+      profileId,
+      groupId,
       accountId: account.id,
       createdAt: now,
       updatedAt: now,
@@ -70,6 +75,29 @@ async function createTestAccount(data: {
     .run();
 
   return account.id;
+}
+
+async function createSecondaryProfileGroup() {
+  const now = new Date().toISOString();
+  const profileId = "secondary";
+  const groupId = `${profileId}:test_group_001`;
+  await db.insert(schema.moneyForwardProfiles).values({
+    id: profileId,
+    name: "Profile B",
+    enabled: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db.insert(schema.groups).values({
+    id: groupId,
+    profileId,
+    mfGroupId: "test_group_001",
+    name: "Group B",
+    isCurrent: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { profileId, groupId };
 }
 
 async function createAccountStatus(
@@ -392,6 +420,23 @@ describe("getLatestUpdateDate", () => {
     const result = await getLatestUpdateDate(undefined, db);
     expect(result).toBeNull();
   });
+
+  it("未指定ではenabledな全profileの最新スクレイプ日時を返す", async () => {
+    const secondary = await createSecondaryProfileGroup();
+    await db
+      .update(schema.groups)
+      .set({ lastScrapedAt: "2025-04-15T10:00:00Z" })
+      .where(eq(schema.groups.id, TEST_GROUP_ID));
+    await db
+      .update(schema.groups)
+      .set({ lastScrapedAt: "2025-04-16T10:00:00Z" })
+      .where(eq(schema.groups.id, secondary.groupId));
+
+    expect(await getLatestUpdateDate(undefined, db)).toBe("2025-04-16T10:00:00Z");
+    expect(await getLatestUpdateDate(createProfileScopeId("primary"), db)).toBe(
+      "2025-04-15T10:00:00Z",
+    );
+  });
 });
 
 describe("getAccountsWithAssets", () => {
@@ -442,6 +487,34 @@ describe("getAccountsWithAssets", () => {
     const result = await getAccountsWithAssets(undefined, db);
     expect(result).toEqual([]);
   });
+
+  it("未指定では全profileを集約し、profile scopeと明示groupでは分離する", async () => {
+    const secondary = await createSecondaryProfileGroup();
+    await db
+      .update(schema.moneyForwardProfiles)
+      .set({ name: "Profile A" })
+      .where(eq(schema.moneyForwardProfiles.id, "primary"));
+    await createTestAccount({ mfId: "shared-a", name: "Shared Account" });
+    await createTestAccount({
+      mfId: "shared-b",
+      name: "Shared Account",
+      profileId: secondary.profileId,
+      groupId: secondary.groupId,
+    });
+
+    const combined = await getAccountsWithAssets(undefined, db);
+    expect(combined).toHaveLength(2);
+    expect(combined.map(({ profileId, profileName }) => ({ profileId, profileName }))).toEqual([
+      { profileId: "primary", profileName: "Profile A" },
+      { profileId: "secondary", profileName: "Profile B" },
+    ]);
+
+    const secondaryOnly = await getAccountsWithAssets(createProfileScopeId("secondary"), db);
+    expect(secondaryOnly.map((account) => account.profileId)).toEqual(["secondary"]);
+
+    const primaryGroupOnly = await getAccountsWithAssets(TEST_GROUP_ID, db);
+    expect(primaryGroupOnly.map((account) => account.profileId)).toEqual(["primary"]);
+  });
 });
 
 describe("getAllAccountMfIds", () => {
@@ -468,6 +541,20 @@ describe("getAllAccountMfIds", () => {
     await resetTestDb(db);
     const result = await getAllAccountMfIds(undefined, db);
     expect(result).toEqual([]);
+  });
+
+  it("未指定では全profileのアカウントIDを返す", async () => {
+    const secondary = await createSecondaryProfileGroup();
+    await createTestAccount({ mfId: "account-a", name: "Account A" });
+    await createTestAccount({
+      mfId: "account-b",
+      name: "Account B",
+      profileId: secondary.profileId,
+      groupId: secondary.groupId,
+    });
+
+    expect(await getAllAccountMfIds(undefined, db)).toEqual(["account-a", "account-b"]);
+    expect(await getAllAccountMfIds(createProfileScopeId("secondary"), db)).toEqual(["account-b"]);
   });
 });
 
@@ -536,6 +623,49 @@ describe("getAccountByMfId", () => {
     await resetTestDb(db);
     const result = await getAccountByMfId("mf1", undefined, db);
     expect(result).toBeNull();
+  });
+
+  it("profile scopeで同じmfIdをprofileごとに取得する", async () => {
+    const secondary = await createSecondaryProfileGroup();
+    await db
+      .update(schema.moneyForwardProfiles)
+      .set({ name: "Profile A" })
+      .where(eq(schema.moneyForwardProfiles.id, "primary"));
+    await createTestAccount({ mfId: "shared", name: "Account A" });
+    await createTestAccount({
+      mfId: "shared",
+      name: "Account B",
+      profileId: secondary.profileId,
+      groupId: secondary.groupId,
+    });
+
+    await expect(
+      getAccountByMfId("shared", createProfileScopeId("primary"), db),
+    ).resolves.toMatchObject({
+      name: "Account A",
+      profileId: "primary",
+      profileName: "Profile A",
+    });
+    await expect(
+      getAccountByMfId("shared", createProfileScopeId("secondary"), db),
+    ).resolves.toMatchObject({
+      name: "Account B",
+      profileId: "secondary",
+      profileName: "Profile B",
+    });
+  });
+
+  it("profile未指定で同じmfIdが複数ある場合はfail closedする", async () => {
+    const secondary = await createSecondaryProfileGroup();
+    await createTestAccount({ mfId: "shared", name: "Account A" });
+    await createTestAccount({
+      mfId: "shared",
+      name: "Account B",
+      profileId: secondary.profileId,
+      groupId: secondary.groupId,
+    });
+
+    await expect(getAccountByMfId("shared", undefined, db)).resolves.toBeNull();
   });
 });
 

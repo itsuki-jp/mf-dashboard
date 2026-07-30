@@ -34,6 +34,10 @@ describe("extractGroupIdFromPath", () => {
     expect(extractGroupIdFromPath("/XyZ123AbC-test1234567")).toBe("XyZ123AbC-test1234567");
     expect(extractGroupIdFromPath("/XyZ123AbC-test1234567/cf")).toBe("XyZ123AbC-test1234567");
   });
+
+  it("decodes profile-scoped internal group IDs", () => {
+    expect(extractGroupIdFromPath("/profile_a%3A0/cf")).toBe("profile_a:0");
+  });
 });
 
 describe("extractPagePath", () => {
@@ -68,6 +72,10 @@ describe("extractPagePath", () => {
     expect(extractPagePath("/XyZ123AbC-test1234567")).toBe("");
     expect(extractPagePath("/XyZ123AbC-test1234567/cf")).toBe("cf");
     expect(extractPagePath("/XyZ123AbC-test1234567/bs")).toBe("bs");
+  });
+
+  it("encodes profile-scoped internal group IDs", () => {
+    expect(buildGroupPath("profile_a:0", "cf")).toBe("/profile_a%3A0/cf");
   });
 });
 

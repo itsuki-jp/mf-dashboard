@@ -11,6 +11,8 @@ import { GroupSelectorDisplay, groupSelectorContainerClassName } from "./group-s
 
 export interface Group {
   id: string;
+  profileId?: string;
+  profileName?: string;
   name: string;
   isCurrent: boolean;
   lastScrapedAt: string | null;
@@ -39,9 +41,7 @@ export function GroupSelectorClient({ groups, defaultGroupId }: GroupSelectorCli
     const pagePath = extractPagePath(pathname);
 
     startTransition(() => {
-      // isCurrent の場合は groupId を null として扱う
-      const targetGroupId = group.isCurrent ? null : groupId;
-      router.push(buildGroupPath(targetGroupId, pagePath) as Route);
+      router.push(buildGroupPath(groupId, pagePath) as Route);
     });
   };
 

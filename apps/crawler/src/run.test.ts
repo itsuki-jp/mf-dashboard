@@ -2,7 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { closeDb, initDb } from "@mf-dashboard/db";
-import { synchronizeMoneyForwardProfiles } from "@mf-dashboard/db/repository/profiles";
+import {
+  synchronizeMoneyForwardProfiles,
+  updateMoneyForwardProfileScrapeStatus,
+} from "@mf-dashboard/db/repository/profiles";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   handleCrawlerFailure,
@@ -27,6 +30,7 @@ vi.mock("@mf-dashboard/db", () => ({
 }));
 vi.mock("@mf-dashboard/db/repository/profiles", () => ({
   synchronizeMoneyForwardProfiles: vi.fn<() => void>(),
+  updateMoneyForwardProfileScrapeStatus: vi.fn<() => void>(),
 }));
 vi.mock("./crawler-phases.js", () => ({
   handleCrawlerFailure: vi.fn<() => void>(),
@@ -54,6 +58,7 @@ beforeEach(async () => {
     ),
   } as never);
   vi.mocked(synchronizeMoneyForwardProfiles).mockResolvedValue(undefined);
+  vi.mocked(updateMoneyForwardProfileScrapeStatus).mockResolvedValue(undefined);
   vi.mocked(runLoadPhase).mockResolvedValue({
     crawler: {
       skipRefresh: false,
@@ -250,6 +255,16 @@ describe("runCrawler progress", () => {
     expect(runInstitutionCategoryPhase).toHaveBeenCalledOnce();
     expect(runCashFlowHistoryPhase).toHaveBeenCalledOnce();
     expect(runAnalyticsPhase).toHaveBeenCalledOnce();
+    expect(updateMoneyForwardProfileScrapeStatus).toHaveBeenCalledWith(
+      expect.anything(),
+      "primary",
+      { lastStatus: "running", lastError: null },
+    );
+    expect(updateMoneyForwardProfileScrapeStatus).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "primary",
+      expect.objectContaining({ lastStatus: "success", lastError: null }),
+    );
   });
 
   test("有効profileを設定順に実行し、progress labelで実行単位を区別する", async () => {
@@ -356,6 +371,14 @@ describe("runCrawler progress", () => {
       expect.objectContaining({
         label: "[primary] データベースに保存",
         status: "failed",
+      }),
+    );
+    expect(updateMoneyForwardProfileScrapeStatus).toHaveBeenCalledWith(
+      expect.anything(),
+      "primary",
+      expect.objectContaining({
+        lastStatus: "scrape_failed",
+        lastError: "処理中にエラーが発生しました",
       }),
     );
     expect(progress.getState().timeline).toContainEqual(

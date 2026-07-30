@@ -1,5 +1,6 @@
 import type { AccountStatusType } from "@mf-dashboard/db/types";
 import { formatLastUpdated } from "../../lib/format";
+import { buildGroupPath } from "../../lib/url";
 import { AccountStatusBadge } from "../ui/account-status-badge";
 import { AmountDisplay } from "../ui/amount-display";
 import { Badge } from "../ui/badge";
@@ -8,6 +9,7 @@ import { Card, CardContent } from "../ui/card";
 type AccountCardProps = {
   mfId: string;
   name: string;
+  profileName?: string;
   type: string;
   status: AccountStatusType;
   lastUpdated: string | null;
@@ -18,14 +20,14 @@ type AccountCardProps = {
 export function AccountCard({
   mfId,
   name,
+  profileName,
   type,
   status,
   lastUpdated,
   totalAssets,
   groupId,
 }: AccountCardProps) {
-  const basePath = groupId ? `/${groupId}/accounts` : "/accounts";
-  const href = `${basePath}/${mfId}`;
+  const href = buildGroupPath(groupId, `accounts/${encodeURIComponent(mfId)}`);
   const isLinkable = mfId !== "unknown";
 
   return (
@@ -35,7 +37,14 @@ export function AccountCard({
     >
       <CardContent className="pt-6">
         <div className="flex items-start justify-between mb-4">
-          <span className="font-semibold text-foreground">{name}</span>
+          <span className="min-w-0 font-semibold text-foreground">
+            <span className="block truncate">{name}</span>
+            {profileName && (
+              <span className="block truncate text-xs font-normal text-muted-foreground">
+                {profileName}
+              </span>
+            )}
+          </span>
           <Badge variant="outline">{type}</Badge>
         </div>
 

@@ -1,7 +1,9 @@
 import {
+  createProfileScopeId,
   getAllAccountMfIds,
   getAccountByMfId,
   getAllGroups,
+  getDashboardProfiles,
   isDatabaseAvailable,
 } from "@mf-dashboard/db";
 import type { Metadata } from "next";
@@ -9,19 +11,27 @@ import { AccountDetailContent } from "../../../accounts/[id]/page";
 
 export async function generateStaticParams() {
   if (!isDatabaseAvailable()) return [{ groupId: "_", id: "_" }];
-  const groups = (await getAllGroups()).filter((g) => !g.isCurrent);
-  if (groups.length === 0) return [{ groupId: "_", id: "_" }];
+  const groups = await getAllGroups();
+  const profiles = await getDashboardProfiles();
 
   const params: { groupId: string; id: string }[] = [];
+
+  for (const profile of profiles) {
+    const groupId = createProfileScopeId(profile.id);
+    const mfIds = await getAllAccountMfIds(groupId);
+    for (const id of mfIds) {
+      params.push({ groupId, id });
+    }
+  }
 
   for (const group of groups) {
     const mfIds = await getAllAccountMfIds(group.id);
     for (const id of mfIds) {
-      params.push({ groupId: group.mfGroupId, id });
+      params.push({ groupId: group.id, id });
     }
   }
 
-  return params;
+  return params.length > 0 ? params : [{ groupId: "_", id: "_" }];
 }
 
 export async function generateMetadata({

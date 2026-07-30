@@ -1,11 +1,24 @@
+import type { Route } from "next";
 import Link from "next/link";
+import { createProfileScopeId } from "../../lib/profile-scope";
+import { buildGroupPath } from "../../lib/url";
 import { Badge } from "./badge";
 
 interface Account {
   id: number;
+  profileId?: string;
+  profileName?: string;
   mfId: string;
   name: string;
   status: string;
+}
+
+function accountHref(account: Account): string {
+  const path = `accounts/${account.mfId}`;
+  return buildGroupPath(
+    account.profileId ? createProfileScopeId(account.profileId) : undefined,
+    path,
+  );
 }
 
 interface NotificationPopoverProps {
@@ -43,10 +56,15 @@ export function NotificationPopover({ errorAccounts, updatingAccounts }: Notific
                 {errorAccounts.map((account) => (
                   <Link
                     key={account.id}
-                    href={`/accounts/${account.mfId}`}
+                    href={accountHref(account) as Route}
                     className="block px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
                   >
-                    {account.name}
+                    <span className="block">{account.name}</span>
+                    {account.profileName && (
+                      <span className="block text-xs text-muted-foreground">
+                        {account.profileName}
+                      </span>
+                    )}
                   </Link>
                 ))}
               </div>
@@ -60,10 +78,15 @@ export function NotificationPopover({ errorAccounts, updatingAccounts }: Notific
                 {updatingAccounts.map((account) => (
                   <Link
                     key={account.id}
-                    href={`/accounts/${account.mfId}`}
+                    href={accountHref(account) as Route}
                     className="block px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
                   >
-                    {account.name}
+                    <span className="block">{account.name}</span>
+                    {account.profileName && (
+                      <span className="block text-xs text-muted-foreground">
+                        {account.profileName}
+                      </span>
+                    )}
                   </Link>
                 ))}
               </div>

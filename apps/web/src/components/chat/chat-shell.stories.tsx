@@ -21,7 +21,7 @@ const response = {
 
 export const Closed: Story = {
   render: () => (
-    <ChatProvider>
+    <ChatProvider currentGroupId="group-a">
       <ChatShell />
     </ChatProvider>
   ),
@@ -29,7 +29,7 @@ export const Closed: Story = {
 
 export const Open: Story = {
   render: () => (
-    <ChatProvider initialOpen>
+    <ChatProvider currentGroupId="group-a" initialOpen>
       <ChatShell />
     </ChatProvider>
   ),
@@ -37,7 +37,7 @@ export const Open: Story = {
 
 export const Response: Story = {
   render: () => (
-    <ChatProvider initialMessages={[response]} initialOpen>
+    <ChatProvider currentGroupId="group-a" initialMessages={[response]} initialOpen>
       <ChatShell />
     </ChatProvider>
   ),
@@ -45,7 +45,7 @@ export const Response: Story = {
 
 export const ClearHistory: Story = {
   render: () => (
-    <ChatProvider initialMessages={[response]} initialOpen>
+    <ChatProvider currentGroupId="group-a" initialMessages={[response]} initialOpen>
       <ChatShell />
     </ChatProvider>
   ),
@@ -64,7 +64,7 @@ export const ClearHistory: Story = {
 
 export const Interaction: Story = {
   render: () => (
-    <ChatProvider>
+    <ChatProvider currentGroupId="group-a">
       <ChatShell />
     </ChatProvider>
   ),

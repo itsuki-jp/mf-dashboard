@@ -251,6 +251,19 @@ describe("ChatProvider", () => {
     );
   });
 
+  it("全profile表示でcurrent groupが指定されない場合は送信しない", () => {
+    mocks.usePathname.mockReturnValue("/cf");
+
+    render(
+      <ChatProvider currentGroupId={null}>
+        <ChatSender />
+      </ChatProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+  });
+
   it("keeps the current-group chat and draft on its explicit group route", () => {
     mocks.usePathname.mockReturnValue("/cf");
     const { rerender } = render(

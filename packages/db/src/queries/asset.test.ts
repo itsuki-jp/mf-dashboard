@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
+import { createProfileScopeId } from "../shared/group-filter";
 import {
   createTestDb,
   resetTestDb,
@@ -8,6 +9,7 @@ import {
   TEST_GLOBAL_GROUP_ID,
   createTestGroup,
   createTestGlobalGroup,
+  createTestProfile,
 } from "../test-helpers";
 import {
   parseDateString,
@@ -41,12 +43,16 @@ beforeEach(async () => {
   await createTestGlobalGroup(db);
 });
 
-async function createAssetHistory(data: { date: string; totalAssets: number }): Promise<number> {
+async function createAssetHistory(data: {
+  date: string;
+  totalAssets: number;
+  groupId?: string;
+}): Promise<number> {
   const now = new Date().toISOString();
   const history = await db
     .insert(schema.assetHistory)
     .values({
-      groupId: TEST_GROUP_ID,
+      groupId: data.groupId ?? TEST_GROUP_ID,
       date: data.date,
       totalAssets: data.totalAssets,
       createdAt: now,
@@ -517,6 +523,79 @@ describe("getLatestTotalAssets", () => {
     await resetTestDb(db);
     const result = await getLatestTotalAssets(undefined, db);
     expect(result).toBeNull();
+  });
+});
+
+describe("複数profileの資産集約", () => {
+  it("全profileを合算し、更新日がずれたprofileは直近値を持ち越す", async () => {
+    const now = new Date().toISOString();
+    await createTestProfile(db, "secondary");
+    await db.insert(schema.groups).values({
+      id: "secondary:global",
+      profileId: "secondary",
+      mfGroupId: "0",
+      name: "Secondary Global",
+      isCurrent: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const primaryOld = await createAssetHistory({ date: "2025-04-14", totalAssets: 100000 });
+    const primaryLatest = await createAssetHistory({ date: "2025-04-15", totalAssets: 120000 });
+    const secondaryLatest = await createAssetHistory({
+      groupId: "secondary:global",
+      date: "2025-04-14",
+      totalAssets: 200000,
+    });
+    await createAssetHistoryCategory({
+      assetHistoryId: primaryOld,
+      categoryName: "預金",
+      amount: 100000,
+    });
+    await createAssetHistoryCategory({
+      assetHistoryId: primaryLatest,
+      categoryName: "預金",
+      amount: 120000,
+    });
+    await createAssetHistoryCategory({
+      assetHistoryId: secondaryLatest,
+      categoryName: "投資信託",
+      amount: 200000,
+    });
+
+    await expect(getLatestTotalAssets(undefined, db)).resolves.toBe(320000);
+    const aggregatedHistory = await getAssetHistoryWithCategories(undefined, db);
+    expect(aggregatedHistory[0]).toEqual({
+      date: "2025-04-15",
+      totalAssets: 320000,
+      categories: { 預金: 120000, 投資信託: 200000 },
+    });
+    await expect(getAssetBreakdownByCategory(undefined, db)).resolves.toEqual([
+      { category: "投資信託", amount: 200000 },
+      { category: "預金", amount: 120000 },
+    ]);
+  });
+
+  it("profile scopeでは対象profileだけを返す", async () => {
+    const now = new Date().toISOString();
+    await createTestProfile(db, "secondary");
+    await db.insert(schema.groups).values({
+      id: "secondary:global",
+      profileId: "secondary",
+      mfGroupId: "0",
+      name: "Secondary Global",
+      isCurrent: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await createAssetHistory({ date: "2025-04-15", totalAssets: 120000 });
+    await createAssetHistory({
+      groupId: "secondary:global",
+      date: "2025-04-15",
+      totalAssets: 200000,
+    });
+
+    await expect(getLatestTotalAssets(createProfileScopeId("secondary"), db)).resolves.toBe(200000);
   });
 });
 

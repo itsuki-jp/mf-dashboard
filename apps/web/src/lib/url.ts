@@ -24,12 +24,17 @@ export function extractGroupIdFromPath(pathname: string): string | null {
   if (!firstSegment) return null;
   if (isKnownPath(firstSegment)) return null;
 
-  return firstSegment;
+  try {
+    return decodeURIComponent(firstSegment);
+  } catch {
+    return null;
+  }
 }
 
 export function buildGroupPath(groupId: string | null | undefined, path: string): string {
   if (groupId) {
-    return path ? `/${groupId}/${path}` : `/${groupId}`;
+    const encodedGroupId = encodeURIComponent(groupId);
+    return path ? `/${encodedGroupId}/${path}` : `/${encodedGroupId}`;
   }
   return path ? `/${path}` : "/";
 }
@@ -39,7 +44,7 @@ export function isNavItemActive(
   itemPath: string,
   groupId: string | null,
 ): boolean {
-  const basePath = groupId ? `/${groupId}` : "";
+  const basePath = groupId ? `/${encodeURIComponent(groupId)}` : "";
   const normalizedPathname = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
 
   if (itemPath === "") {

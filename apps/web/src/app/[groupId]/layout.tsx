@@ -1,20 +1,28 @@
-import { getAllGroups, isDatabaseAvailable } from "@mf-dashboard/db";
+import { getAllGroups, getDashboardProfiles, isDatabaseAvailable } from "@mf-dashboard/db";
+import { createProfileScopeId, parseProfileScopeId } from "@mf-dashboard/db/profile-scope";
 import { notFound } from "next/navigation";
 
 export async function generateStaticParams() {
   if (!isDatabaseAvailable()) return [{ groupId: "_" }];
   const groups = await getAllGroups();
-  const nonCurrent = groups.filter((g) => !g.isCurrent);
-  if (nonCurrent.length === 0) return [{ groupId: "_" }];
-  return nonCurrent.map((group) => ({ groupId: group.mfGroupId }));
+  const profiles = await getDashboardProfiles();
+  const params = [
+    ...profiles.map((profile) => ({ groupId: createProfileScopeId(profile.id) })),
+    ...groups.map((group) => ({ groupId: group.id })),
+  ];
+  return params.length > 0 ? params : [{ groupId: "_" }];
 }
 
 export default async function GroupLayout({ children, params }: LayoutProps<"/[groupId]">) {
   const { groupId } = await params;
   const groups = await getAllGroups();
-  const group = groups.find((g) => g.mfGroupId === groupId);
+  const profileId = parseProfileScopeId(groupId);
+  const profiles = profileId ? await getDashboardProfiles() : [];
+  const validScope = profileId
+    ? profiles.some((profile) => profile.id === profileId)
+    : groups.some((group) => group.id === groupId);
 
-  if (!group) {
+  if (!validScope) {
     notFound();
   }
 

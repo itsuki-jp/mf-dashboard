@@ -1,16 +1,16 @@
 import { desc, eq, and, gte, sql, inArray } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
-import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
+import { resolveGroupIds, getAccountIdsForGroups } from "../shared/group-filter";
 import { transformTransferToIncome } from "../shared/transfer";
 
 export async function getTransactions(
   options?: { limit?: number; groupId?: string },
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, options?.groupId);
-  if (!groupId) return [];
+  const groupIds = await resolveGroupIds(db, options?.groupId);
+  if (groupIds.length === 0) return [];
 
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0) return [];
 
   let query = db
@@ -47,13 +47,13 @@ export async function getTransactionsByMonth(
   groupIdParam?: string,
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return [];
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return [];
 
   const startDate = `${month}-01`;
   const endDate = `${month}-31`;
 
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0) return [];
 
   const results = await db
@@ -92,10 +92,10 @@ export async function getTransactionsByAccountId(
   groupIdParam?: string,
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return [];
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return [];
 
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0 || !accountIds.includes(accountId)) return [];
 
   return await db

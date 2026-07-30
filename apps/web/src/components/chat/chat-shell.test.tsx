@@ -30,7 +30,7 @@ const assistantMessage = {
 describe("ChatShell", () => {
   it("uses a wide default panel", () => {
     render(
-      <ChatProvider initialOpen>
+      <ChatProvider currentGroupId="group-a" initialOpen>
         <ChatShell />
       </ChatProvider>,
     );
@@ -205,7 +205,7 @@ describe("ChatShell", () => {
 
   it("opens, focuses the input, and restores focus after Escape", async () => {
     render(
-      <ChatProvider>
+      <ChatProvider currentGroupId="group-a">
         <ChatShell />
       </ChatProvider>,
     );
@@ -274,7 +274,7 @@ describe("ChatShell", () => {
 
   it("resizes the desktop panel from its left edge", () => {
     render(
-      <ChatProvider initialOpen>
+      <ChatProvider currentGroupId="group-a" initialOpen>
         <ChatShell />
       </ChatProvider>,
     );
@@ -378,7 +378,7 @@ describe("ChatShell", () => {
 
   it("keeps the draft and messages when surrounding page content changes", async () => {
     const { rerender } = render(
-      <ChatProvider>
+      <ChatProvider currentGroupId="group-a">
         <span>ページ A</span>
         <ChatShell />
       </ChatProvider>,
@@ -389,7 +389,7 @@ describe("ChatShell", () => {
     fireEvent.change(input, { target: { value: "入力途中" } });
 
     rerender(
-      <ChatProvider>
+      <ChatProvider currentGroupId="group-a">
         <span>ページ B</span>
         <ChatShell />
       </ChatProvider>,
@@ -406,7 +406,7 @@ describe("ChatShell", () => {
     const localStorageSpy = vi.spyOn(Storage.prototype, "setItem");
 
     render(
-      <ChatProvider>
+      <ChatProvider currentGroupId="group-a">
         <ChatShell />
       </ChatProvider>,
     );
@@ -422,7 +422,7 @@ describe("ChatShell", () => {
 
   it("renders assistant text and a validated internal link", () => {
     render(
-      <ChatProvider initialMessages={[assistantMessage]} initialOpen>
+      <ChatProvider currentGroupId="group-a" initialMessages={[assistantMessage]} initialOpen>
         <ChatShell />
       </ChatProvider>,
     );
@@ -436,6 +436,7 @@ describe("ChatShell", () => {
   it("renders a validated chart tool output without a decorative card", () => {
     render(
       <ChatProvider
+        currentGroupId="group-a"
         initialMessages={[
           {
             id: "assistant-chart",
@@ -504,6 +505,7 @@ describe("ChatShell", () => {
   it("does not expose queryDatabase details after completion", () => {
     render(
       <ChatProvider
+        currentGroupId="group-a"
         initialMessages={[
           {
             id: "assistant-raw-tool",

@@ -1,7 +1,7 @@
 import { getJstDateParts, getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import { eq, and, like, sql, inArray, or, notInArray, ne } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
-import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
+import { resolveGroupIds, getAccountIdsForGroups } from "../shared/group-filter";
 import { generateMonthRange } from "../shared/utils";
 
 /**
@@ -308,11 +308,11 @@ export async function getDeduplicatedTransferExpense(
 
 // Get the latest monthly summary (dynamically calculated from transactions, filtered by group)
 export async function getLatestMonthlySummary(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return undefined;
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return undefined;
 
   // Get the most recent month's summary
-  const summaries = await getMonthlySummaries({ limit: 1, groupId }, db);
+  const summaries = await getMonthlySummaries({ limit: 1, groupId: groupIdParam }, db);
   return summaries[0];
 }
 
@@ -322,11 +322,11 @@ export async function getMonthlySummaries(
   options?: { limit?: number; groupId?: string },
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, options?.groupId);
-  if (!groupId) return [];
+  const groupIds = await resolveGroupIds(db, options?.groupId);
+  if (groupIds.length === 0) return [];
 
-  // Get account IDs for group
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  // Get account IDs for groups
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0) return [];
 
   // 最古の月を取得
@@ -394,11 +394,11 @@ export async function getMonthlySummaries(
 
 // Get all available months from oldest transaction to current month (filtered by group)
 export async function getAvailableMonths(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return [];
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return [];
 
-  // Get account IDs for group
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  // Get account IDs for groups
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0) return [];
 
   // Get the oldest month from transactions
@@ -426,11 +426,11 @@ export async function getMonthlySummaryByMonth(
   groupIdParam?: string,
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return undefined;
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return undefined;
 
-  // Get account IDs for group
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  // Get account IDs for groups
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0) return undefined;
 
   // 通常の収入/支出を集計
@@ -459,7 +459,7 @@ export async function getMonthlySummaryByMonth(
 
   return {
     month,
-    groupId,
+    groupId: groupIds.length === 1 ? groupIds[0] : groupIdParam,
     totalIncome,
     totalExpense,
     netIncome: totalIncome - totalExpense,
@@ -483,11 +483,11 @@ export async function getMonthlyCategoryTotals(
   groupIdParam?: string,
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return [];
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return [];
 
-  // Get account IDs for group
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  // Get account IDs for groups
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0) return [];
 
   // Aggregate transactions by category for the given month
@@ -568,10 +568,10 @@ export async function getYearToDateSummary(
   options?: { year?: number; groupId?: string },
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, options?.groupId);
+  const groupIds = await resolveGroupIds(db, options?.groupId);
   const targetYear = options?.year || getJstDateParts().year;
 
-  if (!groupId) {
+  if (groupIds.length === 0) {
     return {
       year: targetYear,
       totalIncome: 0,
@@ -583,8 +583,8 @@ export async function getYearToDateSummary(
 
   const yearPrefix = `${targetYear}-`;
 
-  // Get account IDs for group
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  // Get account IDs for groups
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0) {
     return {
       year: targetYear,
@@ -644,11 +644,10 @@ export async function getExpenseByFixedVariable(
   groupIdParam?: string,
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  const categoryTotals = await getMonthlyCategoryTotals(month, groupId ?? undefined, db);
+  const groupIds = await resolveGroupIds(db, groupIdParam);
 
-  // Return empty result if no group
-  if (!groupId) {
+  // Return empty result if no groups
+  if (groupIds.length === 0) {
     return {
       fixed: { total: 0, categories: [] as Array<{ category: string; amount: number }> },
       variable: { total: 0, categories: [] as Array<{ category: string; amount: number }> },
@@ -658,45 +657,53 @@ export async function getExpenseByFixedVariable(
   const targets = await db
     .select()
     .from(schema.spendingTargets)
-    .where(eq(schema.spendingTargets.groupId, groupId))
+    .where(inArray(schema.spendingTargets.groupId, groupIds))
     .all();
 
-  const fixedCategoryNames = new Set(
-    targets.filter((t) => t.type === "fixed").map((t) => t.categoryName),
-  );
+  const fixedCategoryNamesByGroup = new Map<string, Set<string>>();
+  for (const target of targets) {
+    if (target.type !== "fixed") continue;
+    const names = fixedCategoryNamesByGroup.get(target.groupId) ?? new Set<string>();
+    names.add(target.categoryName);
+    fixedCategoryNamesByGroup.set(target.groupId, names);
+  }
 
   let fixedTotal = 0;
   let variableTotal = 0;
-  const fixedCategories: Array<{ category: string; amount: number }> = [];
-  const variableCategories: Array<{ category: string; amount: number }> = [];
+  const fixedCategories = new Map<string, number>();
+  const variableCategories = new Map<string, number>();
 
-  for (const item of categoryTotals) {
-    if (item.type !== "expense") continue;
+  for (const groupId of groupIds) {
+    const categoryTotals = await getMonthlyCategoryTotals(month, groupId, db);
+    const fixedCategoryNames = fixedCategoryNamesByGroup.get(groupId) ?? new Set<string>();
+    for (const item of categoryTotals) {
+      if (item.type !== "expense") continue;
 
-    const isFixed = fixedCategoryNames.has(item.category);
-    if (isFixed) {
-      fixedTotal += item.totalAmount;
-      fixedCategories.push({
-        category: item.category,
-        amount: item.totalAmount,
-      });
-    } else {
-      variableTotal += item.totalAmount;
-      variableCategories.push({
-        category: item.category,
-        amount: item.totalAmount,
-      });
+      const categoryMap = fixedCategoryNames.has(item.category)
+        ? fixedCategories
+        : variableCategories;
+      categoryMap.set(item.category, (categoryMap.get(item.category) ?? 0) + item.totalAmount);
+      if (fixedCategoryNames.has(item.category)) {
+        fixedTotal += item.totalAmount;
+      } else {
+        variableTotal += item.totalAmount;
+      }
     }
   }
+
+  const toSortedCategories = (categories: Map<string, number>) =>
+    [...categories.entries()]
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount);
 
   return {
     fixed: {
       total: fixedTotal,
-      categories: fixedCategories.sort((a, b) => b.amount - a.amount),
+      categories: toSortedCategories(fixedCategories),
     },
     variable: {
       total: variableTotal,
-      categories: variableCategories.sort((a, b) => b.amount - a.amount),
+      categories: toSortedCategories(variableCategories),
     },
   };
 }

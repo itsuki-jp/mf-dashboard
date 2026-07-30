@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
+import { createProfileScopeId } from "../profile-scope";
 import {
   createTestDb,
   resetTestDb,
@@ -36,12 +37,16 @@ beforeEach(async () => {
   await createTestGlobalGroup(db);
 });
 
-async function createTestAccount(name: string): Promise<number> {
+async function createTestAccount(
+  name: string,
+  profileId = "primary",
+  groupId = TEST_GROUP_ID,
+): Promise<number> {
   const now = new Date().toISOString();
   const account = await db
     .insert(schema.accounts)
     .values({
-      profileId: "primary",
+      profileId,
       mfId: `mf_${name}`,
       name,
       type: "bank",
@@ -54,8 +59,8 @@ async function createTestAccount(name: string): Promise<number> {
   await db
     .insert(schema.groupAccounts)
     .values({
-      profileId: "primary",
-      groupId: TEST_GROUP_ID,
+      profileId,
+      groupId,
       accountId: account.id,
       createdAt: now,
       updatedAt: now,
@@ -65,12 +70,12 @@ async function createTestAccount(name: string): Promise<number> {
   return account.id;
 }
 
-async function createSnapshot(): Promise<number> {
+async function createSnapshot(groupId = TEST_GLOBAL_GROUP_ID): Promise<number> {
   const now = new Date().toISOString();
   const snapshot = await db
     .insert(schema.dailySnapshots)
     .values({
-      groupId: TEST_GLOBAL_GROUP_ID,
+      groupId,
       date: "2025-04-15",
       createdAt: now,
       updatedAt: now,
@@ -101,12 +106,13 @@ async function createHolding(data: {
   categoryId?: number | null;
   liabilityCategory?: string | null;
   code?: string | null;
+  profileId?: string;
 }): Promise<number> {
   const now = new Date().toISOString();
   const holding = await db
     .insert(schema.holdings)
     .values({
-      profileId: "primary",
+      profileId: data.profileId ?? "primary",
       accountId: data.accountId,
       name: data.name,
       type: data.type ?? "asset",
@@ -253,6 +259,76 @@ describe("getHoldingsWithLatestValues", () => {
   it("スナップショットがない場合は空配列を返す", async () => {
     const result = await getHoldingsWithLatestValues(undefined, db);
     expect(result).toEqual([]);
+  });
+
+  it("未指定では各profileの最新snapshotを集約しprofile scopeでは分離する", async () => {
+    const now = new Date().toISOString();
+    await db.insert(schema.moneyForwardProfiles).values({
+      id: "secondary",
+      name: "Profile B",
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.groups).values([
+      {
+        id: "secondary:current",
+        profileId: "secondary",
+        mfGroupId: "current",
+        name: "Group B",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "secondary:0",
+        profileId: "secondary",
+        mfGroupId: "0",
+        name: "Group B All",
+        isCurrent: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const primaryAccountId = await createTestAccount("Account A");
+    const secondaryAccountId = await createTestAccount(
+      "Account B",
+      "secondary",
+      "secondary:current",
+    );
+    const primarySnapshotId = await createSnapshot();
+    const secondarySnapshotId = await createSnapshot("secondary:0");
+    const primaryHoldingId = await createHolding({
+      accountId: primaryAccountId,
+      name: "Holding A",
+    });
+    const secondaryHoldingId = await createHolding({
+      accountId: secondaryAccountId,
+      name: "Holding B",
+      profileId: "secondary",
+    });
+    await createHoldingValue({
+      holdingId: primaryHoldingId,
+      snapshotId: primarySnapshotId,
+      amount: 1,
+    });
+    await createHoldingValue({
+      holdingId: secondaryHoldingId,
+      snapshotId: secondarySnapshotId,
+      amount: 2,
+    });
+
+    const combined = await getHoldingsWithLatestValues(undefined, db);
+    expect(
+      combined.map(({ profileId, profileName, amount }) => ({ profileId, profileName, amount })),
+    ).toEqual([
+      { profileId: "primary", profileName: "Primary", amount: 1 },
+      { profileId: "secondary", profileName: "Profile B", amount: 2 },
+    ]);
+    await expect(
+      getHoldingsWithLatestValues(createProfileScopeId("secondary"), db),
+    ).resolves.toMatchObject([{ profileId: "secondary", amount: 2 }]);
   });
 
   it("グループでフィルタリングされる", async () => {

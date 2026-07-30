@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scopeGroupId } from "./profile-scope";
+import { createProfileScopeId, parseProfileScopeId, scopeGroupId } from "./profile-scope";
 
 describe("scopeGroupId", () => {
   it("profile IDとraw group IDを衝突しない内部IDへ変換する", () => {
@@ -25,4 +25,19 @@ describe("scopeGroupId", () => {
       "Money Forward group ID must not be empty",
     );
   });
+});
+
+describe("profile scope ID", () => {
+  it("profile IDをURL-safeな表示scopeへ変換し、元へ戻す", () => {
+    const scopeId = createProfileScopeId("user-a");
+    expect(scopeId).toBe("profile--user-a");
+    expect(parseProfileScopeId(scopeId)).toBe("user-a");
+  });
+
+  it.each(["group-001", "profile--", "profile--User-A", "profile--../user-a"])(
+    "profile scopeでない値を拒否する: %s",
+    (scopeId) => {
+      expect(parseProfileScopeId(scopeId)).toBeNull();
+    },
+  );
 });

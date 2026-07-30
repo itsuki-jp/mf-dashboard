@@ -14,6 +14,7 @@ export const Default: Story = {
   args: {
     mfId: "abc123",
     name: "サンプル銀行",
+    profileName: "Profile A",
     type: "銀行",
     status: "ok",
     lastUpdated: "2025-04-26T10:30:00",

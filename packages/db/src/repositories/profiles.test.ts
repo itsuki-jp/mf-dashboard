@@ -94,6 +94,35 @@ describe("Money Forward profile repository", () => {
     });
   });
 
+  it("lastScrapedAtを省略した状態更新では最終成功日時を保持する", async () => {
+    await upsertMoneyForwardProfile(db, {
+      id: "user-a",
+      name: "User A",
+      enabled: true,
+    });
+    await updateMoneyForwardProfileScrapeStatus(db, "user-a", {
+      lastScrapedAt: "2026-01-02T03:04:05.000Z",
+      lastStatus: "success",
+      lastError: null,
+    });
+
+    await updateMoneyForwardProfileScrapeStatus(db, "user-a", {
+      lastStatus: "running",
+      lastError: null,
+    });
+
+    const profile = await db
+      .select()
+      .from(schema.moneyForwardProfiles)
+      .where(eq(schema.moneyForwardProfiles.id, "user-a"))
+      .get();
+    expect(profile).toMatchObject({
+      lastScrapedAt: "2026-01-02T03:04:05.000Z",
+      lastStatus: "running",
+      lastError: null,
+    });
+  });
+
   it("後からactivateしたprofileだけを有効にする", async () => {
     await activateMoneyForwardProfile(db, {
       id: "primary",

@@ -5,8 +5,22 @@ import { Header } from "./header";
 import { SidebarProvider } from "./sidebar-context";
 
 const mockGroups = [
-  { id: "1", name: "個人資産", isCurrent: true, lastScrapedAt: "2025-04-30T10:30:00" },
-  { id: "2", name: "家族", isCurrent: false, lastScrapedAt: "2025-04-30T15:20:00" },
+  {
+    id: "profile_a:0",
+    profileId: "profile_a",
+    profileName: "Profile A",
+    name: "個人資産",
+    isCurrent: true,
+    lastScrapedAt: "2025-04-30T10:30:00",
+  },
+  {
+    id: "profile_a:group_1",
+    profileId: "profile_a",
+    profileName: "Profile A",
+    name: "Group A",
+    isCurrent: false,
+    lastScrapedAt: "2025-04-30T15:20:00",
+  },
 ];
 
 const meta = {
@@ -36,7 +50,7 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   args: {
     groups: mockGroups,
-    defaultGroupId: "1",
+    defaultGroupId: "profile_a:0",
     notifications: (
       <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
     ),
@@ -46,7 +60,7 @@ export const Default: Story = {
 export const SingleGroup: Story = {
   args: {
     groups: [mockGroups[0]],
-    defaultGroupId: "1",
+    defaultGroupId: "profile_a:0",
     notifications: (
       <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
     ),
@@ -66,7 +80,7 @@ export const NoGroup: Story = {
 export const WithNotifications: Story = {
   args: {
     groups: mockGroups,
-    defaultGroupId: "1",
+    defaultGroupId: "profile_a:0",
     notifications: (
       <AccountNotificationsClient
         errorAccounts={[{ id: 1, mfId: "account-1", name: "User Aの銀行口座", status: "error" }]}
@@ -76,5 +90,51 @@ export const WithNotifications: Story = {
         totalIssues={2}
       />
     ),
+  },
+};
+
+export const MultipleProfiles: Story = {
+  args: {
+    groups: [
+      ...mockGroups,
+      {
+        id: "profile_b:0",
+        profileId: "profile_b",
+        profileName: "Profile B",
+        name: "個人資産",
+        isCurrent: true,
+        lastScrapedAt: "2025-04-30T15:25:00",
+      },
+    ],
+    profiles: [
+      {
+        id: "profile_a",
+        name: "Profile A",
+        lastScrapedAt: "2025-04-30T15:20:00",
+        lastStatus: "success",
+        currentGroupId: "profile_a:0",
+      },
+      {
+        id: "profile_b",
+        name: "Profile B",
+        lastScrapedAt: "2025-04-30T15:25:00",
+        lastStatus: "success",
+        currentGroupId: "profile_b:0",
+      },
+    ],
+    defaultGroupId: "profile_a:0",
+    notifications: (
+      <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
+    ),
+  },
+};
+
+export const SelectedProfile: Story = {
+  args: MultipleProfiles.args,
+  parameters: {
+    nextjs: {
+      appDirectory: true,
+      navigation: { pathname: "/profile--profile_a" },
+    },
   },
 };
