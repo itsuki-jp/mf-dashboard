@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, rename, rm } from "node:fs/promises";
+import { chmod, mkdir, open, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import type { BrowserContext } from "playwright";
 import { debug } from "../logger.js";
@@ -43,9 +44,11 @@ export async function saveAuthState(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
   const authStatePath = getAuthStatePath(profileId, environment);
-  const temporaryPath = `${authStatePath}.tmp-${process.pid}`;
+  const temporaryPath = `${authStatePath}.tmp-${process.pid}-${randomUUID()}`;
   await mkdir(path.dirname(authStatePath), { recursive: true });
   try {
+    const temporaryFile = await open(temporaryPath, "wx", 0o600);
+    await temporaryFile.close();
     await context.storageState({ path: temporaryPath });
     await chmod(temporaryPath, 0o600);
     await rename(temporaryPath, authStatePath);

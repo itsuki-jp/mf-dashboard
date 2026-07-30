@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -52,9 +52,11 @@ describe("saveAuthState", () => {
   test("atomically replaces only the selected profile state after a successful write", async () => {
     const destination = path.join(temporaryRoot, "primary.json");
     await writeFile(destination, "old-state", "utf8");
+    let modeDuringWrite: number | null = null;
     const context = {
       storageState: vi.fn<(options: { path: string }) => Promise<void>>(
         async ({ path: outputPath }) => {
+          modeDuringWrite = (await stat(outputPath)).mode & 0o777;
           await writeFile(outputPath, "new-state", "utf8");
         },
       ),
@@ -65,6 +67,9 @@ describe("saveAuthState", () => {
     });
 
     await expect(readFile(destination, "utf8")).resolves.toBe("new-state");
+    const expectedMode = process.platform === "win32" ? 0o666 : 0o600;
+    expect(modeDuringWrite).toBe(expectedMode);
+    expect((await stat(destination)).mode & 0o777).toBe(expectedMode);
     await expect(readFile(path.join(temporaryRoot, "secondary.json"), "utf8")).rejects.toThrow(
       /ENOENT/,
     );
@@ -89,6 +94,7 @@ describe("saveAuthState", () => {
     ).rejects.toThrow("storage state write failed");
 
     await expect(readFile(destination, "utf8")).resolves.toBe("old-state");
-    await expect(readFile(`${destination}.tmp-${process.pid}`, "utf8")).rejects.toThrow(/ENOENT/);
+    const remainingFiles = await readdir(temporaryRoot);
+    expect(remainingFiles).toEqual(["primary.json"]);
   });
 });
