@@ -1,7 +1,12 @@
 node_modules/
 dist/
 *.log
-.env
+.env*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
 *.tsbuildinfo
 
 next-env.d.ts

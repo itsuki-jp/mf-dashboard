@@ -49,6 +49,17 @@ Never include personally identifiable information in tests, Storybook stories, c
 - Do not include personal names in code comments.
 - Never use `data/moneyforward.db` as a source for test or Storybook data because it contains personal information. Use `data/demo.db` instead.
 
+### Secrets and Real Data
+
+This is a public repository. Never commit or publish real credentials, private keys, API or access tokens, TOTP seeds, cookies, browser authentication state, personal financial data, or production database contents.
+
+- This prohibition applies to source code, configuration, tests, fixtures, logs, screenshots, documentation, commit content, and pull request or issue bodies and attachments.
+- Keep `.env*` files, real databases, authentication state, logs, and local secret files outside Git. Only committed `*.example` files may contain anonymous placeholder values.
+- Before staging or publishing changes, inspect the staged diff and tracked filenames for secrets and personal data. Do not assume `.gitignore` is sufficient protection.
+- When an agent must transfer or consume a secret, pass it through an environment variable, protected file, or standard input. Never print the value, include it in command arguments, hash it for reporting, or expose it in tool output. Report only presence, success, and file permissions.
+- Configure Git commits with a GitHub `users.noreply.github.com` address. Do not publish a personal mailbox address in commit metadata.
+- If exposure is suspected, stop using the value, revoke or rotate it first, and then remove it from reachable Git history and published artifacts.
+
 ### Monetary Colors
 
 Use only the semantic classes defined in `apps/web/src/app/globals.css`. Do not define custom colors for monetary values.
