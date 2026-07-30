@@ -17,7 +17,7 @@ export async function generateStaticParams() {
   for (const group of groups) {
     const mfIds = await getAllAccountMfIds(group.id);
     for (const id of mfIds) {
-      params.push({ groupId: group.id, id });
+      params.push({ groupId: group.mfGroupId, id });
     }
   }
 

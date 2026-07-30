@@ -57,6 +57,7 @@ describe("resolveGroupId", () => {
     });
 
     expect(await resolveGroupId(db, "primary:explicit-group")).toBe("primary:explicit-group");
+    expect(await resolveGroupId(db, "explicit-group")).toBe("primary:explicit-group");
   });
 
   it("groupIdが未指定の場合はデフォルトを返す", async () => {

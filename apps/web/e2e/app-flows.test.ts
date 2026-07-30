@@ -86,33 +86,33 @@ test.describe("App flows", () => {
     await page.getByRole("combobox", { name: "グループを選択" }).click();
     await page.getByRole("option", { name: "投資" }).click();
 
-    await expectLocation(page, "/demo:demo_group_001/cf");
+    await expectLocation(page, "/demo_group_001/cf");
     await expectHeading(page, "収支");
     await expect(page.getByRole("combobox", { name: "グループを選択" })).toContainText("投資");
 
     const destinations = [
-      { link: "資産", path: "/demo:demo_group_001/bs", heading: "資産" },
+      { link: "資産", path: "/demo_group_001/bs", heading: "資産" },
       {
         link: "インサイト",
-        path: "/demo:demo_group_001/insights",
+        path: "/demo_group_001/insights",
         heading: "財務インサイト",
       },
       {
         link: "連携サービス",
-        path: "/demo:demo_group_001/accounts",
+        path: "/demo_group_001/accounts",
         heading: "連携サービス一覧",
       },
       {
         link: "シミュレーター",
-        path: "/demo:demo_group_001/simulator",
+        path: "/demo_group_001/simulator",
         heading: "シミュレーター",
       },
       {
         link: "ダッシュボード",
-        path: "/demo:demo_group_001",
+        path: "/demo_group_001",
         heading: "ダッシュボード",
       },
-      { link: "収支", path: "/demo:demo_group_001/cf", heading: "収支" },
+      { link: "収支", path: "/demo_group_001/cf", heading: "収支" },
     ] as const;
 
     for (const { link, path, heading } of destinations) {
@@ -208,11 +208,11 @@ test.describe("App flows", () => {
   });
 
   test("opens account details without leaving the selected group", async ({ page }) => {
-    await page.goto("/demo:demo_group_001/accounts");
+    await page.goto("/demo_group_001/accounts");
     await expectHeading(page, "連携サービス一覧");
 
     await page.getByRole("link", { name: /^SBI証券 自動連携/ }).click();
-    await expectLocation(page, "/demo:demo_group_001/accounts/demo_000005");
+    await expectLocation(page, "/demo_group_001/accounts/demo_000005");
     await expectHeading(page, "SBI証券");
     await expect(page.getByRole("combobox", { name: "グループを選択" })).toContainText("投資");
   });
@@ -263,7 +263,7 @@ test.describe("App flows", () => {
     const invalidPaths = [
       "/unknown-group",
       "/accounts/unknown-account",
-      "/demo:demo_group_001/accounts/unknown-account",
+      "/demo_group_001/accounts/unknown-account",
     ];
 
     for (const path of invalidPaths) {
@@ -274,7 +274,7 @@ test.describe("App flows", () => {
       });
     }
 
-    for (const path of ["/cf/1900-01", "/demo:demo_group_001/cf/1900-01"]) {
+    for (const path of ["/cf/1900-01", "/demo_group_001/cf/1900-01"]) {
       await test.step(`Render the empty month state for ${path}`, async () => {
         await page.goto(path);
         await expectHeading(page, "収支 - 1900年1月");

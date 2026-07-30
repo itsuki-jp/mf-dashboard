@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import type { Db } from "../index";
 import { schema } from "../index";
 
@@ -27,7 +27,12 @@ export async function resolveGroupId(db: Db, groupId?: string): Promise<string |
       schema.moneyForwardProfiles,
       eq(schema.moneyForwardProfiles.id, schema.groups.profileId),
     )
-    .where(and(eq(schema.groups.id, groupId), eq(schema.moneyForwardProfiles.enabled, true)))
+    .where(
+      and(
+        or(eq(schema.groups.id, groupId), eq(schema.groups.mfGroupId, groupId)),
+        eq(schema.moneyForwardProfiles.enabled, true),
+      ),
+    )
     .get();
   return activeGroup?.id ?? null;
 }
