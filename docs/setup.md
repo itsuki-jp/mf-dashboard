@@ -96,7 +96,7 @@ cp .env.example .env
 openssl rand -hex 32
 ```
 
-この時点では、次の値を`.env`へ設定する。
+この時点では共通設定と、選択したSecret Providerの設定を`.env`へ設定する。1Passwordを使う場合は次のとおり。
 
 ```dotenv
 OP_SERVICE_ACCOUNT_TOKEN=<1Password Service Accountのトークン>
@@ -118,8 +118,10 @@ DASHBOARD_URL=https://dashboard.example.com
 | `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Terraform適用前      | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                       |
 | `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraform適用後      | Terraformが作成したAccess ApplicationのAUD                                       |
 | `DASHBOARD_URL`                              | 必須 | Terraform適用前      | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                   |
-| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | Terraform適用前      | 1Password Service Accountのトークン                                              |
-| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Terraform適用前      | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                           |
+| `OP_SERVICE_ACCOUNT_TOKEN`                   | 条件 | Terraform適用前      | 1Password選択時に必須。Service Accountのトークン                                 |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 条件 | Terraform適用前      | 1Password選択時に必須。日本語を含む場合はUUIDを指定                              |
+| `BWS_ACCESS_TOKEN_HOST_FILE`                 | 条件 | Compose起動前        | Bitwarden選択時に必須。Machine Account tokenを保存したowner-read-onlyファイル    |
+| `BWS_*_SECRET_ID`                            | 条件 | Compose起動前        | Bitwarden選択時に必須。username、password、TOTPセットアップキーの各Secret ID     |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 財務インサイト、家計AIチャット、LLMカテゴリ推論。利用する機能では3項目すべて必須 |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                        |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                      |
@@ -160,6 +162,13 @@ BWS_TOTP_SECRET_ID=<TOTPセットアップキーのSecret ID>
 ```
 
 crawlerはtokenファイルを`/run/secrets/bws_access_token`としてread-onlyでmountし、`bws`子プロセスの`BWS_ACCESS_TOKEN`環境変数だけへ渡す。Access Token、取得したSecret値、`bws`のstdout/stderrはログへ出力しない。
+
+Bitwardenを選択した起動・検証では専用overrideを必ず重ねる。これにより1Password構成ではBitwarden tokenファイルを要求しない。
+
+```sh
+docker compose -f compose.yml -f compose.bitwarden.yml config --quiet
+docker compose -f compose.yml -f compose.bitwarden.yml up -d
+```
 
 ### 3.2 インフラ設定
 

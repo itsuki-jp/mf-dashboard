@@ -60,10 +60,6 @@ services:
       AI_MODEL: ${AI_MODEL:-}
       AI_PROVIDER: ${AI_PROVIDER:-}
       AUTH_STATE_PATH: /app/crawler-state/auth-state.json
-      BWS_ACCESS_TOKEN_FILE: ${BWS_ACCESS_TOKEN_FILE:-/run/secrets/bws_access_token}
-      BWS_PASSWORD_SECRET_ID: ${BWS_PASSWORD_SECRET_ID:-}
-      BWS_TOTP_SECRET_ID: ${BWS_TOTP_SECRET_ID:-}
-      BWS_USERNAME_SECRET_ID: ${BWS_USERNAME_SECRET_ID:-}
       CLEANUP_GROUPS: ${CLEANUP_GROUPS:-}
       CRAWLER_HOST: 0.0.0.0
       DASHBOARD_URL: ${DASHBOARD_URL:-}
@@ -83,7 +79,6 @@ services:
       REFRESH_RETRY_DELAY: ${REFRESH_RETRY_DELAY:-}
       REFRESH_TOKEN: ${REFRESH_TOKEN:?Set REFRESH_TOKEN}
       SCRAPE_MODE: ${SCRAPE_MODE:-}
-      SECRET_PROVIDER: ${SECRET_PROVIDER:-onepassword}
       SKIP_REFRESH: ${SKIP_REFRESH:-}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID:-}
@@ -92,8 +87,6 @@ services:
     volumes:
       - ./data:/app/data
       - crawler_auth_state:/app/crawler-state
-    secrets:
-      - bws_access_token
     expose:
       - "8766"
     depends_on:
@@ -101,8 +94,6 @@ services:
     restart: unless-stopped
 
 secrets:
-  bws_access_token:
-    file: ${BWS_ACCESS_TOKEN_HOST_FILE:-./secrets/bws-access-token}
   tunnel_token:
     file: ./secrets/cloudflared-token
 
