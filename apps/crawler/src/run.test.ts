@@ -1,8 +1,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { closeDb, initDb } from "@mf-dashboard/db";
+import { synchronizeMoneyForwardProfiles } from "@mf-dashboard/db/repository/profiles";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
+  handleCrawlerFailure,
   runAnalyticsPhase,
   runAuthPhase,
   runCashFlowHistoryPhase,
@@ -18,7 +21,13 @@ import { runCrawler } from "./run.js";
 import { createGroupScope } from "./scrapers/group.js";
 import { notifyWebRefresh } from "./web-refresh.js";
 
-vi.mock("@mf-dashboard/db", () => ({ closeDb: vi.fn<() => void>() }));
+vi.mock("@mf-dashboard/db", () => ({
+  closeDb: vi.fn<() => void>(),
+  initDb: vi.fn<() => void>(),
+}));
+vi.mock("@mf-dashboard/db/repository/profiles", () => ({
+  synchronizeMoneyForwardProfiles: vi.fn<() => void>(),
+}));
 vi.mock("./crawler-phases.js", () => ({
   handleCrawlerFailure: vi.fn<() => void>(),
   runAnalyticsPhase: vi.fn<() => void>(),
@@ -39,11 +48,16 @@ let tempDir: string;
 beforeEach(async () => {
   vi.clearAllMocks();
   tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-run-progress-"));
+  vi.mocked(initDb).mockResolvedValue({
+    transaction: vi.fn<(callback: (transaction: never) => Promise<void>) => Promise<void>>(
+      async (callback) => callback({} as never),
+    ),
+  } as never);
+  vi.mocked(synchronizeMoneyForwardProfiles).mockResolvedValue(undefined);
   vi.mocked(runLoadPhase).mockResolvedValue({
     crawler: {
       skipRefresh: false,
       cleanupGroups: false,
-      authState: "configured",
       dbPath: "/tmp/demo.db",
       dbExists: true,
       scrapeMode: "month",
@@ -51,14 +65,16 @@ beforeEach(async () => {
       isDebug: false,
       isHeaded: false,
     },
-    profile: {
-      id: "primary",
-      name: "Primary",
-      enabled: true,
-      usernameSecretId: "username-id",
-      passwordSecretId: "password-id",
-      totpSecretId: "totp-id",
-    },
+    profiles: [
+      {
+        id: "primary",
+        name: "Primary",
+        enabled: true,
+        usernameSecretId: "username-id",
+        passwordSecretId: "password-id",
+        totpSecretId: "totp-id",
+      },
+    ],
   });
   vi.mocked(runSetupPhase).mockResolvedValue({
     db: {} as never,
@@ -133,6 +149,52 @@ describe("runCrawler progress", () => {
     expect(runAuthPhase).not.toHaveBeenCalled();
   });
 
+  test("全profile metadataを同期し、enabledなprofileだけを実行する", async () => {
+    const profiles = [
+      {
+        id: "primary",
+        name: "Primary",
+        enabled: true,
+        usernameSecretId: "username-id",
+        passwordSecretId: "password-id",
+        totpSecretId: "totp-id",
+      },
+      {
+        id: "paused",
+        name: "Paused",
+        enabled: false,
+        usernameSecretId: "paused-username-id",
+        passwordSecretId: "paused-password-id",
+        totpSecretId: "paused-totp-id",
+      },
+    ];
+    vi.mocked(runLoadPhase).mockResolvedValue({
+      crawler: {
+        skipRefresh: false,
+        cleanupGroups: false,
+        dbPath: "/tmp/demo.db",
+        dbExists: true,
+        scrapeMode: "month",
+        isHistoryMode: false,
+        isDebug: false,
+        isHeaded: false,
+      },
+      profiles,
+    });
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await runCrawler(progress);
+
+    expect(synchronizeMoneyForwardProfiles).toHaveBeenCalledWith(expect.anything(), profiles);
+    expect(vi.mocked(runSetupPhase).mock.calls.map(([, profile]) => profile.id)).toEqual([
+      "primary",
+    ]);
+  });
+
   test("atomic database save失敗を database save step に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
@@ -190,12 +252,174 @@ describe("runCrawler progress", () => {
     expect(runAnalyticsPhase).toHaveBeenCalledOnce();
   });
 
+  test("有効profileを設定順に実行し、progress labelで実行単位を区別する", async () => {
+    vi.mocked(runLoadPhase).mockResolvedValue({
+      crawler: {
+        skipRefresh: false,
+        cleanupGroups: false,
+        dbPath: "/tmp/demo.db",
+        dbExists: true,
+        scrapeMode: "month",
+        isHistoryMode: false,
+        isDebug: false,
+        isHeaded: false,
+      },
+      profiles: [
+        {
+          id: "primary",
+          name: "Primary",
+          enabled: true,
+          usernameSecretId: "username-id",
+          passwordSecretId: "password-id",
+          totpSecretId: "totp-id",
+        },
+        {
+          id: "secondary",
+          name: "Secondary",
+          enabled: true,
+          usernameSecretId: "secondary-username-id",
+          passwordSecretId: "secondary-password-id",
+          totpSecretId: "secondary-totp-id",
+        },
+      ],
+    });
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await runCrawler(progress);
+
+    expect(vi.mocked(runSetupPhase).mock.calls.map(([, profile]) => profile.id)).toEqual([
+      "primary",
+      "secondary",
+    ]);
+    expect(runSavePhase).toHaveBeenCalledTimes(2);
+    expect(runAnalyticsPhase).toHaveBeenCalledTimes(2);
+    expect(closeDb).toHaveBeenCalledTimes(3);
+    const labels = progress.getState().timeline.map(({ label }) => label);
+    expect(labels).toContain("[primary] MoneyForward に認証");
+    expect(labels).toContain("[secondary] MoneyForward に認証");
+  });
+
+  test("先行profileが失敗しても後続profileを完了してから失敗を返す", async () => {
+    const primaryFailure = new Error("primary database save failed");
+    vi.mocked(runLoadPhase).mockResolvedValue({
+      crawler: {
+        skipRefresh: false,
+        cleanupGroups: false,
+        dbPath: "/tmp/demo.db",
+        dbExists: true,
+        scrapeMode: "month",
+        isHistoryMode: false,
+        isDebug: false,
+        isHeaded: false,
+      },
+      profiles: [
+        {
+          id: "primary",
+          name: "Primary",
+          enabled: true,
+          usernameSecretId: "username-id",
+          passwordSecretId: "password-id",
+          totpSecretId: "totp-id",
+        },
+        {
+          id: "secondary",
+          name: "Secondary",
+          enabled: true,
+          usernameSecretId: "secondary-username-id",
+          passwordSecretId: "secondary-password-id",
+          totpSecretId: "secondary-totp-id",
+        },
+      ],
+    });
+    vi.mocked(runSavePhase).mockRejectedValueOnce(primaryFailure).mockResolvedValueOnce([]);
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await expect(runCrawler(progress)).rejects.toBe(primaryFailure);
+
+    expect(vi.mocked(runSetupPhase).mock.calls.map(([, profile]) => profile.id)).toEqual([
+      "primary",
+      "secondary",
+    ]);
+    expect(runSavePhase).toHaveBeenCalledTimes(2);
+    expect(runAnalyticsPhase).toHaveBeenCalledOnce();
+    expect(handleCrawlerFailure).toHaveBeenCalledOnce();
+    expect(closeDb).toHaveBeenCalledTimes(3);
+    expect(progress.getState().timeline).toContainEqual(
+      expect.objectContaining({
+        label: "[primary] データベースに保存",
+        status: "failed",
+      }),
+    );
+    expect(progress.getState().timeline).toContainEqual(
+      expect.objectContaining({
+        label: "[secondary] データベースに保存",
+        status: "done",
+      }),
+    );
+  });
+
+  test("複数profileの失敗を全件試行後に集約する", async () => {
+    vi.mocked(runLoadPhase).mockResolvedValue({
+      crawler: {
+        skipRefresh: false,
+        cleanupGroups: false,
+        dbPath: "/tmp/demo.db",
+        dbExists: true,
+        scrapeMode: "month",
+        isHistoryMode: false,
+        isDebug: false,
+        isHeaded: false,
+      },
+      profiles: [
+        {
+          id: "primary",
+          name: "Primary",
+          enabled: true,
+          usernameSecretId: "username-id",
+          passwordSecretId: "password-id",
+          totpSecretId: "totp-id",
+        },
+        {
+          id: "secondary",
+          name: "Secondary",
+          enabled: true,
+          usernameSecretId: "secondary-username-id",
+          passwordSecretId: "secondary-password-id",
+          totpSecretId: "secondary-totp-id",
+        },
+      ],
+    });
+    vi.mocked(runSetupPhase)
+      .mockRejectedValueOnce(new Error("primary setup failed"))
+      .mockRejectedValueOnce(new Error("secondary setup failed"));
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    const error = await runCrawler(progress).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toHaveLength(2);
+    expect(runSetupPhase).toHaveBeenCalledTimes(2);
+    expect(handleCrawlerFailure).toHaveBeenCalledTimes(2);
+    expect(closeDb).toHaveBeenCalledTimes(3);
+  });
+
   test("history replacementsをcurrent dataと同じsave phaseへ渡す", async () => {
     vi.mocked(runLoadPhase).mockResolvedValue({
       crawler: {
         skipRefresh: false,
         cleanupGroups: false,
-        authState: "configured",
         dbPath: "/tmp/demo.db",
         dbExists: true,
         scrapeMode: "history",
@@ -203,14 +427,16 @@ describe("runCrawler progress", () => {
         isDebug: false,
         isHeaded: false,
       },
-      profile: {
-        id: "primary",
-        name: "Primary",
-        enabled: true,
-        usernameSecretId: "username-id",
-        passwordSecretId: "password-id",
-        totpSecretId: "totp-id",
-      },
+      profiles: [
+        {
+          id: "primary",
+          name: "Primary",
+          enabled: true,
+          usernameSecretId: "username-id",
+          passwordSecretId: "password-id",
+          totpSecretId: "totp-id",
+        },
+      ],
     });
     const historyMonths = [{ items: [], month: "2026-06" }];
     vi.mocked(runCashFlowHistoryPhase).mockImplementation(

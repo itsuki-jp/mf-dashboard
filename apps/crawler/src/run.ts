@@ -1,4 +1,5 @@
-import { closeDb } from "@mf-dashboard/db";
+import { closeDb, initDb } from "@mf-dashboard/db";
+import { synchronizeMoneyForwardProfiles } from "@mf-dashboard/db/repository/profiles";
 import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import {
   handleCrawlerFailure,
@@ -24,9 +25,53 @@ import { createGroupScope } from "./scrapers/group.js";
 import { notifyWebRefresh } from "./web-refresh.js";
 
 export async function runCrawler(progress: CrawlerProgressReporter): Promise<void> {
-  const { crawler: config, profile } = await runLoadPhase();
+  const { crawler: config, profiles } = await runLoadPhase();
+  const failures: unknown[] = [];
+
+  try {
+    const db = await initDb();
+    await db.transaction((transaction) => synchronizeMoneyForwardProfiles(transaction, profiles));
+  } finally {
+    closeDb();
+  }
+
+  for (const profile of profiles.filter(({ enabled }) => enabled)) {
+    const profileProgress = createProfileProgressReporter(progress, profile.id);
+    try {
+      await runProfileCrawler(config, profile, profileProgress);
+    } catch (err) {
+      failures.push(err);
+      warn(`Money Forward profile ${profile.id} failed; continuing with the next profile.`);
+    }
+  }
+
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new AggregateError(failures, `${failures.length} Money Forward profiles failed`);
+  }
+
+  info("Completed all enabled Money Forward profiles!");
+}
+
+function createProfileProgressReporter(
+  progress: CrawlerProgressReporter,
+  profileId: string,
+): CrawlerProgressReporter {
+  return {
+    ...progress,
+    startStep: (step, metadata) =>
+      progress.startStep({ ...step, label: `[${profileId}] ${step.label}` }, metadata),
+  };
+}
+
+async function runProfileCrawler(
+  config: Awaited<ReturnType<typeof runLoadPhase>>["crawler"],
+  profile: Awaited<ReturnType<typeof runLoadPhase>>["profiles"][number],
+  progress: CrawlerProgressReporter,
+): Promise<void> {
   let runtime: CrawlerRuntime | null = null;
 
+  info(`Starting Money Forward profile: ${profile.id}`);
   try {
     const activeRuntime = await runSetupPhase(config, profile);
     runtime = activeRuntime;
@@ -105,7 +150,7 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
       error("Failed to refresh web cache:", err);
     }
 
-    info("Completed!");
+    info(`Completed Money Forward profile: ${profile.id}`);
   } catch (err) {
     await handleCrawlerFailure(err, runtime?.page, config);
     throw err;

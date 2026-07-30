@@ -110,12 +110,6 @@ export function parseMoneyForwardProfilesConfig(value: unknown): MoneyForwardPro
   if (enabledProfiles.length === 0) {
     throw new Error("Money Forward profiles config must enable at least one profile");
   }
-  if (enabledProfiles.length > 1) {
-    throw new Error(
-      "Only one Money Forward profile can be enabled until sequential profile execution is implemented",
-    );
-  }
-
   return { profiles };
 }
 
@@ -143,12 +137,12 @@ export async function loadMoneyForwardProfilesConfig(
   return parseMoneyForwardProfilesConfig(parsed);
 }
 
-export function getEnabledMoneyForwardProfile(
+export function getEnabledMoneyForwardProfiles(
   config: MoneyForwardProfilesConfig,
-): MoneyForwardProfile {
-  const profile = config.profiles.find(({ enabled }) => enabled);
-  if (!profile) {
+): MoneyForwardProfile[] {
+  const profiles = config.profiles.filter(({ enabled }) => enabled);
+  if (profiles.length === 0) {
     throw new Error("Money Forward profiles config must enable at least one profile");
   }
-  return profile;
+  return profiles;
 }
