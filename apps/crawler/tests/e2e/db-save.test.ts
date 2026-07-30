@@ -22,6 +22,7 @@ import {
 
 const TEST_DB_DIR = path.resolve(process.cwd(), "tests/e2e");
 const TEST_DB_PATH = path.join(TEST_DB_DIR, "test-moneyforward.db");
+const PROFILE = { id: "primary", name: "Primary", enabled: true } as const;
 
 let browser: Browser;
 let context: BrowserContext;
@@ -47,7 +48,7 @@ beforeAll(async () => {
       scrapedData.registeredAccounts,
       institutionCategories,
     );
-    await saveScrapedData(getDb(), scrapedData, institutionCategories);
+    await saveScrapedData(getDb(), PROFILE, scrapedData, institutionCategories);
   });
 });
 

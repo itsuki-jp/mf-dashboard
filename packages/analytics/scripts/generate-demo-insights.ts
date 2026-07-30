@@ -9,16 +9,18 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getDb } from "@mf-dashboard/db";
+import { scopeGroupId } from "@mf-dashboard/db/profile-scope";
 import { generateInsights } from "../src/insights/generator.js";
 
 const GROUP_IDS = ["0", "demo_group_001", "demo_group_002"];
+const DEMO_PROFILE_ID = "demo";
 
 const db = getDb();
 
 const results: Record<string, Record<string, string | null>> = {};
 for (const groupId of GROUP_IDS) {
   console.log(`Generating insights for group: ${groupId}`);
-  results[groupId] = await generateInsights(db, groupId);
+  results[groupId] = await generateInsights(db, scopeGroupId(DEMO_PROFILE_ID, groupId));
   console.log(`Done: ${groupId}`);
 }
 

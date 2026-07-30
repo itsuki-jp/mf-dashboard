@@ -1,4 +1,4 @@
-import { eq, inArray, like, sql } from "drizzle-orm";
+import { and, eq, inArray, like, sql } from "drizzle-orm";
 import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type { CashFlowItem } from "../types";
@@ -6,8 +6,31 @@ import { convertToIsoDate, now, upsertById } from "../utils";
 
 const BATCH_SIZE = 500;
 
+async function assertTransferTargetBelongsToProfile(
+  db: DbExecutor,
+  profileId: string,
+  transferTargetAccountId: number | null,
+): Promise<void> {
+  if (transferTargetAccountId === null) return;
+
+  const account = await db
+    .select({ id: schema.accounts.id })
+    .from(schema.accounts)
+    .where(
+      and(
+        eq(schema.accounts.profileId, profileId),
+        eq(schema.accounts.id, transferTargetAccountId),
+      ),
+    )
+    .get();
+  if (!account) {
+    throw new Error("Transfer target account does not belong to the Money Forward profile");
+  }
+}
+
 export async function saveTransaction(
   db: DbExecutor,
+  profileId: string,
   item: CashFlowItem,
   accountIdMap?: Map<string, number>,
 ): Promise<void> {
@@ -48,8 +71,10 @@ export async function saveTransaction(
       }
     }
   }
+  await assertTransferTargetBelongsToProfile(db, profileId, transferTargetAccountId);
 
   const data = {
+    profileId,
     mfId: item.mfId,
     date: isoDate,
     accountId,
@@ -64,23 +89,42 @@ export async function saveTransaction(
     transferTargetAccountId,
   };
 
-  await upsertById(db, schema.transactions, eq(schema.transactions.mfId, item.mfId), data, data);
+  await upsertById(
+    db,
+    schema.transactions,
+    and(eq(schema.transactions.profileId, profileId), eq(schema.transactions.mfId, item.mfId))!,
+    data,
+    data,
+  );
 }
 
 /**
  * 指定月にトランザクションが存在するかチェック
  * @param month "2026-01" 形式
  */
-export async function hasTransactionsForMonth(db: Db, month: string): Promise<boolean> {
+export async function hasTransactionsForMonth(
+  db: Db,
+  profileId: string,
+  month: string,
+): Promise<boolean> {
   const result = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.transactions)
-    .where(like(schema.transactions.date, `${month}%`))
+    .where(
+      and(
+        eq(schema.transactions.profileId, profileId),
+        like(schema.transactions.date, `${month}%`),
+      ),
+    )
     .get();
   return (result?.count ?? 0) > 0;
 }
 
-export async function findExistingTransactionMfIds(db: Db, mfIds: string[]): Promise<Set<string>> {
+export async function findExistingTransactionMfIds(
+  db: Db,
+  profileId: string,
+  mfIds: string[],
+): Promise<Set<string>> {
   if (mfIds.length === 0) return new Set();
 
   const existingMfIds = new Set<string>();
@@ -89,7 +133,9 @@ export async function findExistingTransactionMfIds(db: Db, mfIds: string[]): Pro
     const rows = await db
       .select({ mfId: schema.transactions.mfId })
       .from(schema.transactions)
-      .where(inArray(schema.transactions.mfId, batch))
+      .where(
+        and(eq(schema.transactions.profileId, profileId), inArray(schema.transactions.mfId, batch)),
+      )
       .all();
 
     for (const row of rows) {
@@ -104,10 +150,19 @@ export async function findExistingTransactionMfIds(db: Db, mfIds: string[]): Pro
  * 指定月のトランザクションを削除
  * @param month "2026-01" 形式
  */
-export async function deleteTransactionsForMonth(db: DbExecutor, month: string): Promise<number> {
+export async function deleteTransactionsForMonth(
+  db: DbExecutor,
+  profileId: string,
+  month: string,
+): Promise<number> {
   const result = await db
     .delete(schema.transactions)
-    .where(like(schema.transactions.date, `${month}%`))
+    .where(
+      and(
+        eq(schema.transactions.profileId, profileId),
+        like(schema.transactions.date, `${month}%`),
+      ),
+    )
     .run();
   return result.rowsAffected;
 }
@@ -138,10 +193,12 @@ function lookupAccountId(
  * CashFlowItem を DB レコード形式に変換
  */
 function prepareTransactionData(
+  profileId: string,
   item: CashFlowItem,
   accountIdMap?: Map<string, number>,
   currentYear?: number,
 ): {
+  profileId: string;
   mfId: string;
   date: string;
   accountId: number | null;
@@ -160,6 +217,7 @@ function prepareTransactionData(
   const transferTargetAccountId = lookupAccountId(accountIdMap, item.transferTarget);
 
   return {
+    profileId,
     mfId: item.mfId,
     date: isoDate,
     accountId,
@@ -180,12 +238,13 @@ function prepareTransactionData(
  */
 export async function replaceTransactionsForMonth(
   db: DbExecutor,
+  profileId: string,
   month: string,
   items: CashFlowItem[],
   accountIdMap?: Map<string, number>,
 ): Promise<number> {
   // 既存データを削除
-  const deleted = await deleteTransactionsForMonth(db, month);
+  const deleted = await deleteTransactionsForMonth(db, profileId, month);
   if (deleted > 0) {
     console.log(`  Deleted ${deleted} existing transactions for ${month}`);
   }
@@ -204,19 +263,27 @@ export async function replaceTransactionsForMonth(
   for (let i = 0; i < validItems.length; i += BATCH_SIZE) {
     const batch = validItems.slice(i, i + BATCH_SIZE);
     const records = batch.map((item) => {
-      const data = prepareTransactionData(item, accountIdMap, currentYear);
+      const data = prepareTransactionData(profileId, item, accountIdMap, currentYear);
       return {
         ...data,
         createdAt: timestamp,
         updatedAt: timestamp,
       };
     });
+    const transferTargetAccountIds = new Set(
+      records
+        .map(({ transferTargetAccountId }) => transferTargetAccountId)
+        .filter((id): id is number => id !== null),
+    );
+    for (const transferTargetAccountId of transferTargetAccountIds) {
+      await assertTransferTargetBelongsToProfile(db, profileId, transferTargetAccountId);
+    }
 
     await db
       .insert(schema.transactions)
       .values(records)
       .onConflictDoUpdate({
-        target: schema.transactions.mfId,
+        target: [schema.transactions.profileId, schema.transactions.mfId],
         set: {
           date: sql`excluded.date`,
           accountId: sql`excluded.account_id`,
@@ -240,13 +307,16 @@ export async function replaceTransactionsForMonth(
 
 export async function saveTransactionsForMonths(
   db: Db,
+  profileId: string,
   months: Array<{ items: CashFlowItem[]; month: string }>,
   accountIdMap?: Map<string, number>,
 ): Promise<number[]> {
   return db.transaction(async (transaction) => {
     const savedCounts: number[] = [];
     for (const { items, month } of months) {
-      savedCounts.push(await replaceTransactionsForMonth(transaction, month, items, accountIdMap));
+      savedCounts.push(
+        await replaceTransactionsForMonth(transaction, profileId, month, items, accountIdMap),
+      );
     }
     return savedCounts;
   });
@@ -254,10 +324,16 @@ export async function saveTransactionsForMonths(
 
 export async function saveTransactionsForMonth(
   db: Db,
+  profileId: string,
   month: string,
   items: CashFlowItem[],
   accountIdMap?: Map<string, number>,
 ): Promise<number> {
-  const [savedCount = 0] = await saveTransactionsForMonths(db, [{ items, month }], accountIdMap);
+  const [savedCount = 0] = await saveTransactionsForMonths(
+    db,
+    profileId,
+    [{ items, month }],
+    accountIdMap,
+  );
   return savedCount;
 }

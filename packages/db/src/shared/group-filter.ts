@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Db } from "../index";
 import { schema } from "../index";
 
@@ -7,14 +7,29 @@ export async function getDefaultGroupId(db: Db): Promise<string | null> {
   const currentGroup = await db
     .select({ id: schema.groups.id })
     .from(schema.groups)
-    .where(eq(schema.groups.isCurrent, true))
+    .innerJoin(
+      schema.moneyForwardProfiles,
+      eq(schema.moneyForwardProfiles.id, schema.groups.profileId),
+    )
+    .where(and(eq(schema.groups.isCurrent, true), eq(schema.moneyForwardProfiles.enabled, true)))
     .get();
   return currentGroup?.id ?? null;
 }
 
 /** グループIDを解決（指定がなければデフォルトを使用） */
 export async function resolveGroupId(db: Db, groupId?: string): Promise<string | null> {
-  return groupId ?? (await getDefaultGroupId(db));
+  if (!groupId) return getDefaultGroupId(db);
+
+  const activeGroup = await db
+    .select({ id: schema.groups.id })
+    .from(schema.groups)
+    .innerJoin(
+      schema.moneyForwardProfiles,
+      eq(schema.moneyForwardProfiles.id, schema.groups.profileId),
+    )
+    .where(and(eq(schema.groups.id, groupId), eq(schema.moneyForwardProfiles.enabled, true)))
+    .get();
+  return activeGroup?.id ?? null;
 }
 
 /** グループに属するアカウントIDリストを取得 */

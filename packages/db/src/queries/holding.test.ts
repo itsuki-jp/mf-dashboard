@@ -6,7 +6,9 @@ import {
   resetTestDb,
   closeTestDb,
   TEST_GROUP_ID,
+  TEST_GLOBAL_GROUP_ID,
   createTestGroup,
+  createTestGlobalGroup,
 } from "../test-helpers";
 import {
   getLatestSnapshot,
@@ -31,6 +33,7 @@ afterAll(() => {
 beforeEach(async () => {
   await resetTestDb(db);
   await createTestGroup(db);
+  await createTestGlobalGroup(db);
 });
 
 async function createTestAccount(name: string): Promise<number> {
@@ -38,6 +41,7 @@ async function createTestAccount(name: string): Promise<number> {
   const account = await db
     .insert(schema.accounts)
     .values({
+      profileId: "primary",
       mfId: `mf_${name}`,
       name,
       type: "bank",
@@ -50,6 +54,7 @@ async function createTestAccount(name: string): Promise<number> {
   await db
     .insert(schema.groupAccounts)
     .values({
+      profileId: "primary",
       groupId: TEST_GROUP_ID,
       accountId: account.id,
       createdAt: now,
@@ -65,7 +70,7 @@ async function createSnapshot(): Promise<number> {
   const snapshot = await db
     .insert(schema.dailySnapshots)
     .values({
-      groupId: TEST_GROUP_ID,
+      groupId: TEST_GLOBAL_GROUP_ID,
       date: "2025-04-15",
       createdAt: now,
       updatedAt: now,
@@ -101,6 +106,7 @@ async function createHolding(data: {
   const holding = await db
     .insert(schema.holdings)
     .values({
+      profileId: "primary",
       accountId: data.accountId,
       name: data.name,
       type: data.type ?? "asset",
@@ -262,6 +268,7 @@ describe("getHoldingsWithLatestValues", () => {
     const outsideAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "mf_outside",
         name: "Outside",
         type: "bank",
@@ -287,30 +294,26 @@ describe("getHoldingsWithLatestValues", () => {
 
     const now = new Date().toISOString();
     await db.insert(schema.groups).values({
-      id: "empty-group",
+      profileId: "primary",
+      mfGroupId: "empty-group",
+      id: "primary:empty-group",
       name: "Empty Group",
       isCurrent: false,
       createdAt: now,
       updatedAt: now,
     });
 
-    const result = await getHoldingsWithLatestValues("empty-group", db);
+    const result = await getHoldingsWithLatestValues("primary:empty-group", db);
 
     expect(result).toEqual([]);
   });
 
   it("未照合の保有資産はグループ選択なしだけで返す", async () => {
     const now = new Date().toISOString();
-    await db.insert(schema.groups).values({
-      id: "0",
-      name: "All Accounts",
-      isCurrent: false,
-      createdAt: now,
-      updatedAt: now,
-    });
     const fallbackAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "unknown",
         name: "-",
         type: "手動",
@@ -326,7 +329,7 @@ describe("getHoldingsWithLatestValues", () => {
     });
     await createHoldingValue({ holdingId, snapshotId, amount: 100000 });
 
-    await expect(getHoldingsWithLatestValues("0", db)).resolves.toMatchObject([
+    await expect(getHoldingsWithLatestValues(TEST_GLOBAL_GROUP_ID, db)).resolves.toMatchObject([
       { name: "Unmatched Asset A" },
     ]);
     await expect(getHoldingsWithLatestValues(TEST_GROUP_ID, db)).resolves.toEqual([]);
@@ -352,6 +355,7 @@ describe("getHoldingsByAccountId", () => {
     const outsideAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "mf_outside",
         name: "Outside",
         type: "bank",
@@ -421,6 +425,7 @@ describe("getHoldingsWithDailyChange", () => {
     const outsideAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "mf_outside",
         name: "Outside",
         type: "bank",
@@ -452,14 +457,16 @@ describe("getHoldingsWithDailyChange", () => {
 
     const now = new Date().toISOString();
     await db.insert(schema.groups).values({
-      id: "empty-group",
+      profileId: "primary",
+      mfGroupId: "empty-group",
+      id: "primary:empty-group",
       name: "Empty Group",
       isCurrent: false,
       createdAt: now,
       updatedAt: now,
     });
 
-    await expect(getHoldingsWithDailyChange("empty-group", db)).resolves.toEqual([]);
+    await expect(getHoldingsWithDailyChange("primary:empty-group", db)).resolves.toEqual([]);
   });
 
   it("スナップショットがない場合は空配列を返す", async () => {

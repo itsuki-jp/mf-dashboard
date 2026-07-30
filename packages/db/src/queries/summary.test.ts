@@ -46,6 +46,7 @@ async function createTestAccount(name: string): Promise<number> {
   const account = await db
     .insert(schema.accounts)
     .values({
+      profileId: "primary",
       mfId: `mf_${name}`,
       name,
       type: "bank",
@@ -58,6 +59,7 @@ async function createTestAccount(name: string): Promise<number> {
   await db
     .insert(schema.groupAccounts)
     .values({
+      profileId: "primary",
       groupId: TEST_GROUP_ID,
       accountId: account.id,
       createdAt: now,
@@ -68,13 +70,14 @@ async function createTestAccount(name: string): Promise<number> {
   return account.id;
 }
 
-const GROUP_NONE_ID = "0";
+const GROUP_NONE_ID = "primary:0";
 
 async function createExternalAccount(name: string): Promise<number> {
   const now = new Date().toISOString();
   const account = await db
     .insert(schema.accounts)
     .values({
+      profileId: "primary",
       mfId: `mf_external_${name}`,
       name,
       type: "bank",
@@ -89,6 +92,8 @@ async function createExternalAccount(name: string): Promise<number> {
   await db
     .insert(schema.groups)
     .values({
+      profileId: "primary",
+      mfGroupId: "0",
       id: GROUP_NONE_ID,
       name: "グループ選択なし",
       isCurrent: false,
@@ -101,6 +106,7 @@ async function createExternalAccount(name: string): Promise<number> {
   await db
     .insert(schema.groupAccounts)
     .values({
+      profileId: "primary",
       groupId: GROUP_NONE_ID,
       accountId: account.id,
       createdAt: now,
@@ -125,6 +131,7 @@ async function createTransaction(data: {
   await db
     .insert(schema.transactions)
     .values({
+      profileId: "primary",
       mfId: `tx_${Date.now()}_${Math.random()}`,
       date: data.date,
       accountId: data.accountId,
@@ -217,6 +224,7 @@ describe("getMonthlySummaryByMonth", () => {
     await db
       .insert(schema.transactions)
       .values({
+        profileId: "primary",
         mfId: `mf-transfer-${Date.now()}`,
         accountId: accountId,
         date: "2025-04-15",
@@ -415,6 +423,7 @@ describe("getMonthlyCategoryTotals", () => {
     await db
       .insert(schema.transactions)
       .values({
+        profileId: "primary",
         mfId: `mf-transfer-${Date.now()}`,
         accountId: externalAccountId,
         date: "2025-04-15",
@@ -558,6 +567,7 @@ describe("getYearToDateSummary", () => {
     await db
       .insert(schema.transactions)
       .values({
+        profileId: "primary",
         mfId: `mf-transfer-income-${Date.now()}`,
         accountId: accountId,
         date: "2025-04-20",
@@ -576,6 +586,7 @@ describe("getYearToDateSummary", () => {
     await db
       .insert(schema.transactions)
       .values({
+        profileId: "primary",
         mfId: `mf-transfer-income-dup-${Date.now()}`,
         accountId: accountId,
         date: "2025-04-20",
@@ -886,6 +897,7 @@ describe("getDeduplicatedTransferIncome", () => {
     await db
       .insert(schema.transactions)
       .values({
+        profileId: "primary",
         mfId: `mf-transfer-${Date.now()}-${Math.random()}`,
         accountId: groupAccountId,
         date,
@@ -923,6 +935,7 @@ describe("getDeduplicatedTransferIncome", () => {
     await db
       .insert(schema.transactions)
       .values({
+        profileId: "primary",
         mfId: "mf-transfer-dup-1",
         accountId: accountId,
         date: "2025-04-15",
@@ -939,6 +952,7 @@ describe("getDeduplicatedTransferIncome", () => {
     await db
       .insert(schema.transactions)
       .values({
+        profileId: "primary",
         mfId: "mf-transfer-dup-2",
         accountId: accountId,
         date: "2025-04-15",
@@ -1005,6 +1019,7 @@ describe("getDeduplicatedTransferIncome", () => {
     const commonGroupAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "mf_common_group",
         name: "Common Group Account",
         type: "bank",
@@ -1017,6 +1032,7 @@ describe("getDeduplicatedTransferIncome", () => {
     await db
       .insert(schema.groupAccounts)
       .values({
+        profileId: "primary",
         groupId: TEST_GROUP_ID,
         accountId: commonGroupAccount.id,
         createdAt: now,
@@ -1028,6 +1044,7 @@ describe("getDeduplicatedTransferIncome", () => {
     await db
       .insert(schema.transactions)
       .values({
+        profileId: "primary",
         mfId: "mf-transfer-common",
         accountId: accountId,
         date: "2025-04-15",
@@ -1123,6 +1140,7 @@ describe("buildOutsideTransferCondition", () => {
     const outsideAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "mf_outside",
         name: "Outside Account",
         type: "bank",
@@ -1131,10 +1149,12 @@ describe("buildOutsideTransferCondition", () => {
       })
       .returning()
       .get();
-    const outsideGroupId = "outside_group";
+    const outsideGroupId = "primary:outside_group";
     await db
       .insert(schema.groups)
       .values({
+        profileId: "primary",
+        mfGroupId: "outside_group",
         id: outsideGroupId,
         name: "Outside Group",
         isCurrent: false,
@@ -1145,6 +1165,7 @@ describe("buildOutsideTransferCondition", () => {
     await db
       .insert(schema.groupAccounts)
       .values({
+        profileId: "primary",
         groupId: outsideGroupId,
         accountId: outsideAccount.id,
         createdAt: now,
@@ -1156,6 +1177,7 @@ describe("buildOutsideTransferCondition", () => {
     await db
       .insert(schema.transactions)
       .values({
+        profileId: "primary",
         mfId: `tx_${Date.now()}`,
         date: "2025-04-15",
         accountId: outsideAccount.id,
@@ -1196,6 +1218,7 @@ describe("buildGroupTransactionCondition", () => {
     const outsideAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "mf_outside2",
         name: "Outside Account",
         type: "bank",
@@ -1204,10 +1227,12 @@ describe("buildGroupTransactionCondition", () => {
       })
       .returning()
       .get();
-    const outsideGroupId = "outside_group2";
+    const outsideGroupId = "primary:outside_group2";
     await db
       .insert(schema.groups)
       .values({
+        profileId: "primary",
+        mfGroupId: "outside_group2",
         id: outsideGroupId,
         name: "Outside Group",
         isCurrent: false,
@@ -1218,6 +1243,7 @@ describe("buildGroupTransactionCondition", () => {
     await db
       .insert(schema.groupAccounts)
       .values({
+        profileId: "primary",
         groupId: outsideGroupId,
         accountId: outsideAccount.id,
         createdAt: now,
@@ -1229,6 +1255,7 @@ describe("buildGroupTransactionCondition", () => {
     await db
       .insert(schema.transactions)
       .values({
+        profileId: "primary",
         mfId: `tx_outside_${Date.now()}`,
         date: "2025-04-16",
         accountId: outsideAccount.id,
@@ -1309,6 +1336,7 @@ describe("buildExpenseSum", () => {
     const outsideAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "mf_outside3",
         name: "Outside Account",
         type: "bank",
@@ -1317,10 +1345,12 @@ describe("buildExpenseSum", () => {
       })
       .returning()
       .get();
-    const outsideGroupId = "outside_group3";
+    const outsideGroupId = "primary:outside_group3";
     await db
       .insert(schema.groups)
       .values({
+        profileId: "primary",
+        mfGroupId: "outside_group3",
         id: outsideGroupId,
         name: "Outside Group",
         isCurrent: false,
@@ -1331,6 +1361,7 @@ describe("buildExpenseSum", () => {
     await db
       .insert(schema.groupAccounts)
       .values({
+        profileId: "primary",
         groupId: outsideGroupId,
         accountId: outsideAccount.id,
         createdAt: now,

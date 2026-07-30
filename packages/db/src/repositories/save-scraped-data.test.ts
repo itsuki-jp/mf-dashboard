@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import { getAllGroups, getCurrentGroup } from "../queries/groups";
 import * as schema from "../schema/schema";
+import { getDefaultGroupId, resolveGroupId } from "../shared/group-filter";
 import { closeTestDb, createTestDb, resetTestDb } from "../test-helpers";
 import type { ScrapedData } from "../types";
 import {
@@ -17,6 +19,7 @@ type Db = Awaited<ReturnType<typeof createTestDb>>;
 
 let db: Db;
 let temporaryDirectory: string;
+const PROFILE = { id: "primary", name: "Primary", enabled: true } as const;
 
 beforeAll(async () => {
   temporaryDirectory = mkdtempSync(join(tmpdir(), "mf-dashboard-save-scraped-data-"));
@@ -234,7 +237,7 @@ describe("saveScrapedData", () => {
   test("ポートフォリオの全詳細フィールドを保持して保存する", async () => {
     const data = createScrapedData();
 
-    await saveScrapedData(db, data);
+    await saveScrapedData(db, PROFILE, data);
 
     const holdings = await db.select().from(schema.holdings).all();
     const values = await db.select().from(schema.holdingValues).all();
@@ -257,7 +260,7 @@ describe("saveScrapedData", () => {
     const data = createScrapedData();
     data.portfolio.items[0]!.type = "預金・現金";
 
-    await expect(saveScrapedData(db, data)).rejects.toThrow("Cannot classify a deposit");
+    await expect(saveScrapedData(db, PROFILE, data)).rejects.toThrow("Cannot classify a deposit");
     await expect(db.select().from(schema.holdings).all()).resolves.toEqual([]);
   });
 
@@ -269,7 +272,7 @@ describe("saveScrapedData", () => {
       type: "預金・現金",
     };
 
-    await saveScrapedData(db, data, new Map([["account-a", "暗号資産・FX・貴金属"]]));
+    await saveScrapedData(db, PROFILE, data, new Map([["account-a", "暗号資産・FX・貴金属"]]));
 
     const savedHolding = await db
       .select({
@@ -305,7 +308,7 @@ describe("saveScrapedData", () => {
       balance: 500000,
     });
 
-    await saveScrapedData(db, data);
+    await saveScrapedData(db, PROFILE, data);
 
     const manualAccount = await db
       .select()
@@ -325,7 +328,7 @@ describe("saveScrapedData", () => {
         .from(schema.groupAccounts)
         .where(eq(schema.groupAccounts.accountId, manualAccount!.id))
         .get(),
-    ).resolves.toMatchObject({ groupId: "group-a" });
+    ).resolves.toMatchObject({ groupId: "primary:group-a" });
   });
 
   test("通常口座詳細由来の年金をaccountMfIdで自動連携口座へ紐づける", async () => {
@@ -338,7 +341,7 @@ describe("saveScrapedData", () => {
       balance: 500000,
     });
 
-    await saveScrapedData(db, data);
+    await saveScrapedData(db, PROFILE, data);
 
     const linkedAccount = await db
       .select()
@@ -373,7 +376,7 @@ describe("saveScrapedData", () => {
       balance: 500000,
     });
 
-    await saveScrapedData(db, data);
+    await saveScrapedData(db, PROFILE, data);
 
     const manualAccount = await db
       .select()
@@ -407,7 +410,7 @@ describe("saveScrapedData", () => {
       balance: 500000,
     });
 
-    await saveScrapedData(db, data);
+    await saveScrapedData(db, PROFILE, data);
 
     const fallbackAccount = await db
       .select()
@@ -441,7 +444,7 @@ describe("saveScrapedData", () => {
       balance: 500000,
     });
 
-    await saveScrapedData(db, data);
+    await saveScrapedData(db, PROFILE, data);
 
     const fallbackAccount = await db
       .select()
@@ -460,6 +463,7 @@ describe("saveScrapedData", () => {
   test("今回の取得対象外にある旧accountMfIdへ手入力資産を紐づけない", async () => {
     const now = new Date().toISOString();
     await db.insert(schema.accounts).values({
+      profileId: "primary",
       mfId: "stale-account-a",
       name: "Manual Account A",
       type: "手動",
@@ -475,7 +479,7 @@ describe("saveScrapedData", () => {
       balance: 500000,
     });
 
-    await saveScrapedData(db, data);
+    await saveScrapedData(db, PROFILE, data);
 
     const fallbackAccount = await db
       .select()
@@ -520,7 +524,7 @@ describe("saveScrapedData", () => {
       balance: 500000,
     });
 
-    await saveScrapedData(db, data);
+    await saveScrapedData(db, PROFILE, data);
 
     const fallbackAccount = await db
       .select()
@@ -554,7 +558,7 @@ describe("saveScrapedData", () => {
       balance: 300000,
     });
 
-    await saveScrapedData(db, data);
+    await saveScrapedData(db, PROFILE, data);
 
     const manualAccount = await db
       .select()
@@ -589,7 +593,7 @@ describe("saveScrapedData", () => {
       ],
     };
 
-    await expect(saveScrapedData(db, data)).rejects.toThrow(/spending_targets/);
+    await expect(saveScrapedData(db, PROFILE, data)).rejects.toThrow(/spending_targets/);
 
     await expect(db.select().from(schema.groups).all()).resolves.toEqual([]);
     await expect(db.select().from(schema.groupAccounts).all()).resolves.toEqual([]);
@@ -609,7 +613,7 @@ describe("saveScrapedData", () => {
       ],
     };
 
-    await expect(saveGroupOnlyData(db, data)).rejects.toThrow(/spending_targets/);
+    await expect(saveGroupOnlyData(db, PROFILE, data)).rejects.toThrow(/spending_targets/);
 
     await expect(db.select().from(schema.groups).all()).resolves.toEqual([]);
     await expect(db.select().from(schema.groupAccounts).all()).resolves.toEqual([]);
@@ -630,7 +634,7 @@ describe("saveScrapedData", () => {
     };
 
     await expect(
-      saveScrapedDataBatch(db, { fullData, groupOnlyData: [groupData] }),
+      saveScrapedDataBatch(db, PROFILE, { fullData, groupOnlyData: [groupData] }),
     ).rejects.toThrow(/spending_targets/);
 
     await expect(db.select().from(schema.groups).all()).resolves.toEqual([]);
@@ -641,28 +645,54 @@ describe("saveScrapedData", () => {
 
   test("stale group cleanupをcurrent dataと同じtransactionで公開する", async () => {
     await db.insert(schema.groups).values({
-      id: "stale-group",
+      profileId: "primary",
+      mfGroupId: "stale-group",
+      id: "primary:stale-group",
       name: "Stale Group",
       isCurrent: false,
       createdAt: "2026-07-01T00:00:00.000Z",
       updatedAt: "2026-07-01T00:00:00.000Z",
     });
 
-    await saveScrapedDataBatch(db, {
+    await saveScrapedDataBatch(db, PROFILE, {
       cleanupGroupIds: ["group-a"],
       fullData: createScrapedData(),
       groupOnlyData: [],
     });
 
     await expect(db.select().from(schema.groups).all()).resolves.toEqual([
-      expect.objectContaining({ id: "group-a" }),
+      expect.objectContaining({ id: "primary:group-a" }),
     ]);
+  });
+
+  test("primary保存後にsecondaryを保存すると読取対象もsecondaryへ切り替わる", async () => {
+    await saveScrapedDataBatch(db, PROFILE, {
+      fullData: createScrapedData(),
+      groupOnlyData: [],
+    });
+    const secondaryData = createScrapedData();
+    secondaryData.currentGroup = { id: "group-a", name: "Secondary Group", isCurrent: true };
+
+    await saveScrapedDataBatch(
+      db,
+      { id: "secondary", name: "Secondary", enabled: true },
+      { fullData: secondaryData, groupOnlyData: [] },
+    );
+
+    await expect(getCurrentGroup(db)).resolves.toMatchObject({
+      id: "secondary:group-a",
+      name: "Secondary Group",
+    });
+    await expect(getAllGroups(db)).resolves.toMatchObject([{ id: "secondary:group-a" }]);
+    await expect(getDefaultGroupId(db)).resolves.toBe("secondary:group-a");
+    await expect(resolveGroupId(db, "primary:group-a")).resolves.toBeNull();
+    await expect(resolveGroupId(db, "secondary:group-a")).resolves.toBe("secondary:group-a");
   });
 
   test("institution category更新をrefresh transaction失敗時にrollbackする", async () => {
     const fullData = createScrapedData();
-    await saveScrapedData(db, fullData);
-    await saveScrapedDataBatch(db, {
+    await saveScrapedData(db, PROFILE, fullData);
+    await saveScrapedDataBatch(db, PROFILE, {
       fullData,
       groupOnlyData: [],
       institutionCategories: new Map([["account-a", "銀行"]]),
@@ -671,7 +701,7 @@ describe("saveScrapedData", () => {
     expect(bankCategory).toEqual(expect.objectContaining({ name: "銀行" }));
 
     await expect(
-      saveScrapedDataBatch(db, {
+      saveScrapedDataBatch(db, PROFILE, {
         fullData,
         groupOnlyData: [],
         institutionCategories: new Map([["account-a", "証券"]]),
@@ -707,7 +737,9 @@ describe("saveScrapedData", () => {
   test("後続の履歴月保存失敗時もcurrent dataと先行月をrollbackする", async () => {
     const fullData = createScrapedData();
     await db.insert(schema.groups).values({
-      id: "stale-group",
+      profileId: "primary",
+      mfGroupId: "stale-group",
+      id: "primary:stale-group",
       name: "Stale Group",
       isCurrent: false,
       createdAt: "2026-07-01T00:00:00.000Z",
@@ -726,7 +758,7 @@ describe("saveScrapedData", () => {
     };
 
     await expect(
-      saveScrapedDataBatch(db, {
+      saveScrapedDataBatch(db, PROFILE, {
         cleanupGroupIds: ["group-a"],
         fullData,
         groupOnlyData: [],
@@ -741,7 +773,7 @@ describe("saveScrapedData", () => {
     ).rejects.toThrow(/transactions/);
 
     await expect(db.select().from(schema.groups).all()).resolves.toEqual([
-      expect.objectContaining({ id: "stale-group" }),
+      expect.objectContaining({ id: "primary:stale-group" }),
     ]);
     await expect(db.select().from(schema.transactions).all()).resolves.toEqual([]);
     await expect(db.select().from(schema.dailySnapshots).all()).resolves.toEqual([]);

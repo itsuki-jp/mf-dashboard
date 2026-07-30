@@ -439,7 +439,7 @@ README、`.env.example`、セットアップ文書、テストも更新する。
 - enabledなプロファイルが1つ以上ある
 - `id`にパス区切り、`..`、空白を許可しない
 
-DBが`profile_id`へ対応するPR 5までは、データ衝突を避けるためenabledなプロファイルを最大1件に制限し、2件以上ならMoney Forwardへ接続する前に停止する。DB対応後にこの暫定制限を外して直列profile loopを有効化する。
+DBが`profile_id`へ対応し、Part Fの直列profile loopと失敗分離が完成するまでは、データ衝突や非決定的な画面表示を避けるためenabledなプロファイルを最大1件に制限する。2件以上ならMoney Forwardへ接続する前に停止し、Part Fの実装・検証と同じPRでこの暫定制限を外す。
 
 ### 環境変数
 
@@ -491,6 +491,8 @@ rm -f data/moneyforward.db data/moneyforward.db-wal data/moneyforward.db-shm
 ```
 
 本番開始後はこのコマンドを実行してはいけない。
+
+Gitのcheckout/merge hookや通常のデプロイ手順から`*.db-wal`・`*.db-shm`だけを削除してはいけない。稼働中DBの補助ファイルはSQLiteに管理させ、開発DBを作り直す場合も先にComposeを停止してDB本体と同じ単位で扱う。
 
 ---
 

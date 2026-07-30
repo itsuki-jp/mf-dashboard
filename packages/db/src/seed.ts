@@ -19,9 +19,13 @@ import { migrate } from "drizzle-orm/libsql/migrator";
 import * as schema from "./schema/schema";
 import {
   ALL_GROUP_IDS,
+  DEMO_PROFILE_ID,
   GROUP_ID,
   GROUP_ID_INVESTMENT,
   GROUP_ID_LIVING,
+  RAW_GROUP_ID,
+  RAW_GROUP_ID_INVESTMENT,
+  RAW_GROUP_ID_LIVING,
   accountDefs,
   assetCategoryNames,
   buildAccountCategoryMap,
@@ -110,9 +114,22 @@ console.log(
 // 1. グループ
 // ---------------------------------------------------------------------------
 await db
+  .insert(schema.moneyForwardProfiles)
+  .values({
+    id: DEMO_PROFILE_ID,
+    name: "Demo",
+    enabled: true,
+    createdAt: now(),
+    updatedAt: now(),
+  })
+  .run();
+
+await db
   .insert(schema.groups)
   .values({
     id: GROUP_ID,
+    profileId: DEMO_PROFILE_ID,
+    mfGroupId: RAW_GROUP_ID,
     name: "グループ選択なし",
     isCurrent: true,
     lastScrapedAt: now(),
@@ -125,6 +142,8 @@ await db
   .insert(schema.groups)
   .values({
     id: GROUP_ID_INVESTMENT,
+    profileId: DEMO_PROFILE_ID,
+    mfGroupId: RAW_GROUP_ID_INVESTMENT,
     name: "投資",
     isCurrent: false,
     lastScrapedAt: now(),
@@ -137,6 +156,8 @@ await db
   .insert(schema.groups)
   .values({
     id: GROUP_ID_LIVING,
+    profileId: DEMO_PROFILE_ID,
+    mfGroupId: RAW_GROUP_ID_LIVING,
     name: "生活",
     isCurrent: false,
     lastScrapedAt: now(),
@@ -191,6 +212,7 @@ for (const account of accountDefs) {
   const result = await db
     .insert(schema.accounts)
     .values({
+      profileId: DEMO_PROFILE_ID,
       mfId: mfId(),
       name: account.name,
       type: account.type,
@@ -208,6 +230,7 @@ for (const account of accountDefs) {
     await db
       .insert(schema.groupAccounts)
       .values({
+        profileId: DEMO_PROFILE_ID,
         groupId,
         accountId: result!.id,
         createdAt: ts,
@@ -251,6 +274,7 @@ for (const holding of holdingDefs) {
   const holdingResult = await db
     .insert(schema.holdings)
     .values({
+      profileId: DEMO_PROFILE_ID,
       mfId: mfId(),
       accountId: accId,
       categoryId: catId,
@@ -426,6 +450,7 @@ await db.transaction(async (tx) => {
     await tx
       .insert(schema.transactions)
       .values({
+        profileId: DEMO_PROFILE_ID,
         mfId: txRecord.mfId,
         date: txRecord.date,
         accountId: txRecord.accountId,
@@ -476,6 +501,7 @@ const insightCount = await seedInsights({
   yearEnd: YEAR_END,
   monthEnd: MONTH_END,
   fixedDay: FIXED_DAY,
+  profileId: DEMO_PROFILE_ID,
 });
 if (insightCount > 0) {
   console.log(`インサイトデータを挿入しました (${insightCount}グループ)`);

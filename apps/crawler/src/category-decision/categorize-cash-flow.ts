@@ -47,10 +47,11 @@ function toCategorizationTargets(
 
 async function findCategorizationTargets(
   db: Db,
+  profileId: string,
   cashFlow: CashFlowSummary,
 ): Promise<TransactionForCategorization[]> {
   const mfIds = cashFlow.items.map((item) => item.mfId);
-  const existingMfIds = await findExistingTransactionMfIds(db, mfIds);
+  const existingMfIds = await findExistingTransactionMfIds(db, profileId, mfIds);
   return toCategorizationTargets(cashFlow.items, existingMfIds);
 }
 
@@ -88,22 +89,23 @@ function applyDecisionsToCashFlow(
 export async function categorizeCashFlowMonth(options: {
   page: Page;
   db: Db;
+  profileId: string;
   cashFlow: CashFlowSummary;
   config: NormalizedCategoryDecisionConfig;
   usage: CategoryDecisionUsage;
 }): Promise<CashFlowSummary> {
-  const { page, db, cashFlow, config, usage } = options;
+  const { page, db, profileId, cashFlow, config, usage } = options;
   let latestCashFlowForFallback = cashFlow;
   let appliedDecisionsForFallback: ResolvedCategoryDecision[] = [];
 
   try {
-    if ((await findCategorizationTargets(db, cashFlow)).length === 0) {
+    if ((await findCategorizationTargets(db, profileId, cashFlow)).length === 0) {
       return cashFlow;
     }
 
     const latestCashFlow = await scrapeCashFlowMonth(page, cashFlow.month);
     latestCashFlowForFallback = latestCashFlow;
-    const latestTargets = await findCategorizationTargets(db, latestCashFlow);
+    const latestTargets = await findCategorizationTargets(db, profileId, latestCashFlow);
     if (latestTargets.length === 0) {
       return latestCashFlow;
     }

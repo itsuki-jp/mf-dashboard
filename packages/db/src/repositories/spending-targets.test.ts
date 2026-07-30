@@ -102,8 +102,8 @@ describe("getSpendingTargets", () => {
 });
 
 describe("グループ分離", () => {
-  const GROUP_A = "group_a";
-  const GROUP_B = "group_b";
+  const GROUP_A = "primary:group_a";
+  const GROUP_B = "primary:group_b";
 
   const dataA: SpendingTargetsData = {
     categories: [
@@ -135,11 +135,27 @@ describe("グループ分離", () => {
     const ts = new Date().toISOString();
     await db
       .insert(schema.groups)
-      .values({ id: GROUP_A, name: "グループA", isCurrent: false, createdAt: ts, updatedAt: ts })
+      .values({
+        profileId: "primary",
+        mfGroupId: "group_a",
+        id: GROUP_A,
+        name: "グループA",
+        isCurrent: false,
+        createdAt: ts,
+        updatedAt: ts,
+      })
       .run();
     await db
       .insert(schema.groups)
-      .values({ id: GROUP_B, name: "グループB", isCurrent: false, createdAt: ts, updatedAt: ts })
+      .values({
+        profileId: "primary",
+        mfGroupId: "group_b",
+        id: GROUP_B,
+        name: "グループB",
+        isCurrent: false,
+        createdAt: ts,
+        updatedAt: ts,
+      })
       .run();
   });
 

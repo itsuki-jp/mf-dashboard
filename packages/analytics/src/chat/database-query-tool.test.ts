@@ -41,7 +41,7 @@ describe("createDatabaseQueryTool", () => {
     expect(description).toContain("「最も赤字幅が大きい」は合計値を昇順に並べる");
     expect(description).toContain("holding_values.amount（評価額）を損失として扱わない");
     expect(description).toContain("投資情報には主に「株式(現物)」「投資信託」");
-    expect(description).toContain("no-group（group_id = '0'）の最新完了snapshot 1件");
+    expect(description).toContain("選択profileで全口座を取得するno-groupの最新完了snapshot 1件");
     expect(description).toContain("最新snapshotが空なら過去の保有情報は含まれない");
     expect(description).toContain("daily_snapshots.group_idは選択中グループへ匿名化投影済み");
     expect(description).toContain("mf_idは匿名化のため常にNULL");

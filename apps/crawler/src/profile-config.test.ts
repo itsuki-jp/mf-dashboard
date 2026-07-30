@@ -64,12 +64,14 @@ describe("parseMoneyForwardProfilesConfig", () => {
     ).toThrow("Money Forward profiles config must enable at least one profile");
   });
 
-  test("rejects multiple enabled profiles until database storage is profile-aware", () => {
+  test("rejects multiple enabled profiles until sequential execution is implemented", () => {
     expect(() =>
       parseMoneyForwardProfilesConfig({
         profiles: [profile(), profile({ id: "secondary", name: "Secondary" })],
       }),
-    ).toThrow("Only one Money Forward profile can be enabled");
+    ).toThrow(
+      "Only one Money Forward profile can be enabled until sequential profile execution is implemented",
+    );
   });
 });
 

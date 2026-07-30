@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type { AccountStatus } from "../types";
@@ -7,15 +7,20 @@ import { getOrCreateInstitutionCategory } from "./institution-categories";
 
 const BATCH_SIZE = 500;
 
-export async function upsertAccount(db: Db, account: AccountStatus): Promise<number> {
+export async function upsertAccount(
+  db: Db,
+  profileId: string,
+  account: AccountStatus,
+): Promise<number> {
   // URLからmfIdを抽出（例: /accounts/show/0T1oiWJN9GM... -> 0T1oiWJN9GM...）
   const mfId = account.mfId || account.name;
 
   return await upsertById(
     db,
     schema.accounts,
-    eq(schema.accounts.mfId, mfId),
+    and(eq(schema.accounts.profileId, profileId), eq(schema.accounts.mfId, mfId))!,
     {
+      profileId,
       mfId,
       name: account.name,
       type: account.type,
@@ -57,6 +62,7 @@ export async function saveAccountStatus(
 
 export async function updateAccountCategory(
   db: DbExecutor,
+  profileId: string,
   mfId: string,
   categoryName: string,
 ): Promise<void> {
@@ -65,7 +71,7 @@ export async function updateAccountCategory(
   await db
     .update(schema.accounts)
     .set({ categoryId, updatedAt: now() })
-    .where(eq(schema.accounts.mfId, mfId))
+    .where(and(eq(schema.accounts.profileId, profileId), eq(schema.accounts.mfId, mfId)))
     .run();
 }
 
@@ -73,8 +79,15 @@ export async function updateAccountCategory(
  * 全アカウントのname/mfIdからidへのマップを構築
  * トランザクション保存時のaccount_idルックアップ用
  */
-export async function buildAccountIdMap(db: DbExecutor): Promise<Map<string, number>> {
-  const accounts = await db.select().from(schema.accounts).all();
+export async function buildAccountIdMap(
+  db: DbExecutor,
+  profileId: string,
+): Promise<Map<string, number>> {
+  const accounts = await db
+    .select()
+    .from(schema.accounts)
+    .where(eq(schema.accounts.profileId, profileId))
+    .all();
   const map = new Map<string, number>();
 
   for (const account of accounts) {
@@ -88,7 +101,11 @@ export async function buildAccountIdMap(db: DbExecutor): Promise<Map<string, num
 /**
  * 複数アカウントの一括upsert
  */
-export async function upsertAccounts(db: DbExecutor, accounts: AccountStatus[]): Promise<void> {
+export async function upsertAccounts(
+  db: DbExecutor,
+  profileId: string,
+  accounts: AccountStatus[],
+): Promise<void> {
   if (accounts.length === 0) return;
 
   const timestamp = now();
@@ -98,6 +115,7 @@ export async function upsertAccounts(db: DbExecutor, accounts: AccountStatus[]):
     const records = batch.map((account) => {
       const mfId = account.mfId || account.name;
       return {
+        profileId,
         mfId,
         name: account.name,
         type: account.type,
@@ -112,7 +130,7 @@ export async function upsertAccounts(db: DbExecutor, accounts: AccountStatus[]):
       .insert(schema.accounts)
       .values(records)
       .onConflictDoUpdate({
-        target: schema.accounts.mfId,
+        target: [schema.accounts.profileId, schema.accounts.mfId],
         set: {
           name: sql`excluded.name`,
           type: sql`excluded.type`,

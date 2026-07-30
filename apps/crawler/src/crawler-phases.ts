@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { analyzeFinancialData } from "@mf-dashboard/analytics";
 import { initDb, type Db } from "@mf-dashboard/db";
+import { scopeGroupId } from "@mf-dashboard/db/profile-scope";
 import { buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
 import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
@@ -222,6 +223,7 @@ export async function runScrapePhase(
 
 export async function runSavePhase(
   db: Db,
+  profile: MoneyForwardProfile,
   page: Page,
   scrapeResult: ScrapeResult,
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
@@ -243,6 +245,7 @@ export async function runSavePhase(
         cashFlow: await categorizeCashFlowMonth({
           page,
           db,
+          profileId: profile.id,
           cashFlow: globalData.cashFlow,
           config: categoryDecision.config,
           usage: categoryDecision.usage,
@@ -265,7 +268,7 @@ export async function runSavePhase(
     return buildGroupOnlyScrapedData(groupData);
   });
 
-  return saveScrapedDataBatch(db, {
+  return saveScrapedDataBatch(db, profile, {
     cleanupGroupIds,
     fullData,
     groupOnlyData: groupOnlyScrapedData,
@@ -285,6 +288,7 @@ export async function runInstitutionCategoryPhase(page: Page): Promise<Map<strin
 
 export async function runCashFlowHistoryPhase(
   db: Db,
+  profileId: string,
   page: Page,
   config: Pick<CrawlerConfig, "isHistoryMode">,
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
@@ -292,8 +296,8 @@ export async function runCashFlowHistoryPhase(
   publishHistory: (
     months: Array<{ items: CashFlowItem[]; month: string }>,
   ) => Promise<number[]> = async (months) => {
-    const accountIdMap = await buildAccountIdMap(db);
-    return saveTransactionsForMonths(db, months, accountIdMap);
+    const accountIdMap = await buildAccountIdMap(db, profileId);
+    return saveTransactionsForMonths(db, profileId, months, accountIdMap);
   },
 ): Promise<void> {
   phase("Cash Flow History");
@@ -310,7 +314,7 @@ export async function runCashFlowHistoryPhase(
   let monthsToFetch = 1;
   for (let i = 1; i < maxMonths; i++) {
     const month = getHistoryMonth(now, i);
-    if (!(await hasTransactionsForMonth(db, month))) {
+    if (!(await hasTransactionsForMonth(db, profileId, month))) {
       monthsToFetch = i + 1;
     }
   }
@@ -385,6 +389,7 @@ export async function runCashFlowHistoryPhase(
         ? await categorizeCashFlowMonth({
             page,
             db,
+            profileId,
             cashFlow: monthData,
             config: categoryDecision.config,
             usage: categoryDecision.usage,
@@ -410,7 +415,11 @@ export async function runCashFlowHistoryPhase(
   }
 }
 
-export async function runAnalyticsPhase(db: Db, groupDataList: GroupData[]): Promise<void> {
+export async function runAnalyticsPhase(
+  db: Db,
+  profileId: string,
+  groupDataList: GroupData[],
+): Promise<void> {
   phase("Analytics");
 
   if (groupDataList.length === 0) {
@@ -421,7 +430,7 @@ export async function runAnalyticsPhase(db: Db, groupDataList: GroupData[]): Pro
   const results = await Promise.all(
     groupDataList.map(async (groupData) => {
       info(`Running financial analysis for ${groupData.group.name}`);
-      const report = await analyzeFinancialData(db, groupData.group.id);
+      const report = await analyzeFinancialData(db, scopeGroupId(profileId, groupData.group.id));
       if (report) {
         info(`Analysis completed and saved for ${groupData.group.name}`);
       } else {

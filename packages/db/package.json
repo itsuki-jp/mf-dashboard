@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema/schema.ts",
+    "./profile-scope": "./src/profile-scope.ts",
     "./repository/save-scraped-data": "./src/repositories/save-scraped-data.ts",
     "./repository/transactions": "./src/repositories/transactions.ts",
     "./repository/summaries": "./src/repositories/summaries.ts",
@@ -17,6 +18,7 @@
     "./repository/holdings": "./src/repositories/holdings.ts",
     "./repository/spending-targets": "./src/repositories/spending-targets.ts",
     "./repository/analytics": "./src/repositories/analytics.ts",
+    "./repository/profiles": "./src/repositories/profiles.ts",
     "./queries/read-only-query": "./src/queries/read-only-query.ts",
     "./types": "./src/types.ts",
     "./utils": "./src/utils.ts",

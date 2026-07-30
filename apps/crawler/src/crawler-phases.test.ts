@@ -25,6 +25,15 @@ import { scrapeCashFlowHistory } from "./scrapers/cash-flow-history.js";
 import { switchGroup } from "./scrapers/group.js";
 import { scrapeInstitutionCategories } from "./scrapers/institution-categories.js";
 
+const PROFILE = {
+  id: "primary",
+  name: "Primary",
+  enabled: true,
+  usernameSecretId: "00000000-0000-4000-8000-000000000001",
+  passwordSecretId: "00000000-0000-4000-8000-000000000002",
+  totpSecretId: "00000000-0000-4000-8000-000000000003",
+} as const;
+
 vi.mock("./category-decision/categorize-cash-flow.js", () => ({
   categorizeCashFlowMonth: vi.fn<() => Promise<CashFlowSummary>>(),
 }));
@@ -253,7 +262,8 @@ describe("runSavePhase", () => {
 
     await runSavePhase(
       db as Parameters<typeof runSavePhase>[0],
-      page as Parameters<typeof runSavePhase>[1],
+      PROFILE,
+      page as Parameters<typeof runSavePhase>[2],
       scrapeResult(originalCashFlow),
       categoryDecision,
     );
@@ -262,6 +272,7 @@ describe("runSavePhase", () => {
     expect(categorizeCashFlowMonth).toHaveBeenCalledWith({
       page,
       db,
+      profileId: "primary",
       cashFlow: originalCashFlow,
       config: categoryDecision.config,
       usage: categoryDecision.usage,
@@ -270,7 +281,7 @@ describe("runSavePhase", () => {
       expect.objectContaining({ cashFlow: categorizedCashFlow }),
       expect.objectContaining({ group: expect.objectContaining({ id: "0" }) }),
     );
-    expect(saveScrapedDataBatch).toHaveBeenCalledWith(db, {
+    expect(saveScrapedDataBatch).toHaveBeenCalledWith(db, PROFILE, {
       cleanupGroupIds: undefined,
       fullData: { kind: "full" },
       groupOnlyData: [{ kind: "group-only" }],
@@ -296,6 +307,7 @@ describe("runCashFlowHistoryPhase", () => {
       await expect(
         runCashFlowHistoryPhase(
           {} as never,
+          "primary",
           {} as never,
           { isHistoryMode: true },
           undefined,
@@ -338,6 +350,7 @@ describe("runCashFlowHistoryPhase", () => {
 
       await runCashFlowHistoryPhase(
         {} as never,
+        "primary",
         {} as never,
         { isHistoryMode: true },
         undefined,
@@ -379,7 +392,8 @@ describe("runCashFlowHistoryPhase", () => {
       await expect(
         runCashFlowHistoryPhase(
           db as Parameters<typeof runCashFlowHistoryPhase>[0],
-          page as Parameters<typeof runCashFlowHistoryPhase>[1],
+          "primary",
+          page as Parameters<typeof runCashFlowHistoryPhase>[2],
           { isHistoryMode: true },
           undefined,
           progress,
@@ -423,7 +437,8 @@ describe("runCashFlowHistoryPhase", () => {
       await expect(
         runCashFlowHistoryPhase(
           db as Parameters<typeof runCashFlowHistoryPhase>[0],
-          page as Parameters<typeof runCashFlowHistoryPhase>[1],
+          "primary",
+          page as Parameters<typeof runCashFlowHistoryPhase>[2],
           { isHistoryMode: true },
           undefined,
           progress,
@@ -464,7 +479,8 @@ describe("runCashFlowHistoryPhase", () => {
 
       await runCashFlowHistoryPhase(
         db as Parameters<typeof runCashFlowHistoryPhase>[0],
-        page as Parameters<typeof runCashFlowHistoryPhase>[1],
+        "primary",
+        page as Parameters<typeof runCashFlowHistoryPhase>[2],
         { isHistoryMode: true },
         undefined,
         progress,
@@ -508,7 +524,8 @@ describe("runCashFlowHistoryPhase", () => {
 
     await runCashFlowHistoryPhase(
       db as Parameters<typeof runCashFlowHistoryPhase>[0],
-      page as Parameters<typeof runCashFlowHistoryPhase>[1],
+      "primary",
+      page as Parameters<typeof runCashFlowHistoryPhase>[2],
       { isHistoryMode: true },
       categoryDecision,
     );
@@ -516,12 +533,14 @@ describe("runCashFlowHistoryPhase", () => {
     expect(categorizeCashFlowMonth).toHaveBeenCalledWith({
       page,
       db,
+      profileId: "primary",
       cashFlow: originalCashFlow,
       config: categoryDecision.config,
       usage: categoryDecision.usage,
     });
     expect(saveTransactionsForMonths).toHaveBeenCalledWith(
       db,
+      "primary",
       [{ items: categorizedCashFlow.items, month: "2026-06" }],
       accountIdMap,
     );

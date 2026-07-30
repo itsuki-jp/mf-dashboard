@@ -14,7 +14,6 @@ export const READ_ONLY_QUERY_MAX_SQLITE_HEAP_BYTES = 64 * 1024 * 1024;
 const MAX_RESULT_COLUMNS = 32;
 const MAX_JOIN_COUNT = 8;
 const MAX_UNION_COUNT = 8;
-const GLOBAL_SNAPSHOT_GROUP_ID = "0";
 
 const WRITE_KEYWORDS =
   /\b(?:alter|analyze|attach|create|delete|detach|drop|insert|pragma|reindex|release|rollback|savepoint|update|vacuum)\b/i;
@@ -38,7 +37,10 @@ const SOURCE_CLAUSE_TERMINATORS = new Set([
   "window",
 ]);
 
-const TABLE_NAMES = (Object.values(schema) as unknown[]).filter(isTable).map(getTableName);
+const SANDBOX_TABLES = (Object.values(schema) as unknown[])
+  .filter(isTable)
+  .filter((table) => table !== schema.moneyForwardProfiles);
+const TABLE_NAMES = SANDBOX_TABLES.map(getTableName);
 
 const TABLE_NAME_SET = new Set(TABLE_NAMES);
 const SCHEMA_QUALIFIER = new RegExp(
@@ -122,16 +124,12 @@ const QUERY_PROCESS_SOURCE = String.raw`
 `;
 
 export function describeDatabaseSchema(): string {
-  const tables = (Object.values(schema) as unknown[])
-    .filter(isTable)
-    .map((table) => {
-      const columns = Object.values(getTableColumns(table))
-        .map(
-          (column) => `${column.name} ${column.getSQLType()}${column.notNull ? " NOT NULL" : ""}`,
-        )
-        .join(", ");
-      return `- ${getTableName(table)}(${columns})`;
-    })
+  const tables = SANDBOX_TABLES.map((table) => {
+    const columns = Object.values(getTableColumns(table))
+      .map((column) => `${column.name} ${column.getSQLType()}${column.notNull ? " NOT NULL" : ""}`)
+      .join(", ");
+    return `- ${getTableName(table)}(${columns})`;
+  })
     .sort()
     .join("\n");
 
@@ -152,10 +150,10 @@ export function describeDatabaseSchema(): string {
 リレーションと家計データの意味:
 - 金額は円。${transactions}.${schema.transactions.amount.name}は収入・支出とも常に正の値であり、符号から種別を判定してはいけない
 - 通常明細は${transactions}.${schema.transactions.type.name} = 'income'が収入・入金、'expense'が支出・出金、'transfer'が振替である。説明、カテゴリ、金額、口座残高の増減から種別を推測してはいけない
-- 振替元の${transactions}.${schema.transactions.accountId.name}だけが現在グループ内なら収入、${schema.transactions.transferTargetAccountId.name}だけが現在グループ内なら支出として扱う。両口座が同じユーザー定義グループ（group_id = '0'を除く）に属する内部振替は集計から除外する
+- 振替元の${transactions}.${schema.transactions.accountId.name}だけが現在グループ内なら収入、${schema.transactions.transferTargetAccountId.name}だけが現在グループ内なら支出として扱う。両口座が同じユーザー定義グループ（groups.mf_group_id = '0'のno-groupを除く）に属する内部振替は集計から除外する
 - 収支は上記で分類した収入合計から支出合計を引いた値であり、全取引の単純なSUMではない。同一の振替や対応する通常明細を重複集計しない
 - 通常の収支集計では${schema.transactions.isTransfer.name} = 0かつ${schema.transactions.isExcludedFromCalculation.name} = 0を使用する
-- chat query sandboxの${transactions}.is_internal_transfer = 1は、振替元・振替先が同じユーザー定義group（group_id = '0'を除く）に属する内部振替であり、収支集計から除外する
+- chat query sandboxの${transactions}.is_internal_transfer = 1は、振替元・振替先が同じユーザー定義group（no-groupを除く）に属する内部振替であり、収支集計から除外する
 - chat query sandboxの${transactions}.transfer_counterparty_keyは振替相手口座の匿名stable keyであり、振替の重複排除にはraw IDではなくこの値を使用する
 - 振替元または振替先の口座IDが未解決の振替はchat query sandboxから除外済みであり、収入・支出へ集計しない
 - chat query sandboxのaccounts・holdings・transactionsにあるmf_idは匿名化のため常にNULL。件数にはid、振替の重複排除にはtransfer_counterparty_keyを使用する
@@ -170,7 +168,7 @@ export function describeDatabaseSchema(): string {
 - 資産・負債・投資の現在金額には${holdingValues}.${schema.holdingValues.amount.name}を使用する。件数を明示的に求められていない限りCOUNTではなく金額の合計と内訳を取得する
 - 負債は${holdings}.${schema.holdings.type.name} = 'liability'で判定する。負債の総額は${holdingValues}.${schema.holdingValues.amount.name}のSUM、内訳は${holdings}.${schema.holdings.liabilityCategory.name}ごとのSUMとして取得し、件数や登録状況へ読み替えない
 - 資産カテゴリは${holdings}.${schema.holdings.categoryId.name} = ${assetCategories}.${schema.assetCategories.id.name}でJOINする。投資情報には主に「株式(現物)」「投資信託」「債券」「FX」「先物」「暗号資産・FX・貴金属」のカテゴリを使用し、「預金・現金」「暗号資産」「電子マネー・プリペイド」は含めない
-- chat query sandboxの${dailySnapshots}は全口座を取得するno-group（group_id = '0'）の最新完了snapshot 1件、${holdings}・${holdingValues}はそのsnapshot内かつ現在グループ口座の行だけへ限定済み。最新snapshotが空なら過去の保有情報は含まれない。銘柄・負債・投資の現在値は${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINして使用する
+- chat query sandboxの${dailySnapshots}は選択profileで全口座を取得するno-groupの最新完了snapshot 1件、${holdings}・${holdingValues}はそのsnapshot内かつ現在グループ口座の行だけへ限定済み。最新snapshotが空なら過去の保有情報は含まれない。銘柄・負債・投資の現在値は${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINして使用する
 - chat query sandboxの${dailySnapshots}.${schema.dailySnapshots.groupId.name}は選択中グループへ匿名化投影済み。保有情報のgroup scopeは${holdings}から${groupAccounts}を経由して確認する
 - ${directlyGroupedTables}は${schema.assetHistory.groupId.name} = :groupIdで直接絞る`;
 }
@@ -395,12 +393,21 @@ function quoteSqlText(value: string): string {
 function createScopedDatabaseSql(databasePath: string, groupId: string): string {
   const sourceDatabase = quoteSqlText(databasePath);
   const selectedGroup = quoteSqlText(groupId);
-  const globalSnapshotGroup = quoteSqlText(GLOBAL_SNAPSHOT_GROUP_ID);
+  const selectedProfileId = `(
+    SELECT profile_id FROM source.groups WHERE id = ${selectedGroup} LIMIT 1
+  )`;
+  const globalSnapshotGroup = `(
+    SELECT id FROM source.groups
+    WHERE profile_id = ${selectedProfileId} AND mf_group_id = '0'
+    LIMIT 1
+  )`;
   const accountIds = `
     SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}
     UNION
     SELECT id FROM source.accounts
-    WHERE mf_id = 'unknown' AND ${selectedGroup} = ${globalSnapshotGroup}
+    WHERE profile_id = ${selectedProfileId}
+      AND mf_id = 'unknown'
+      AND ${selectedGroup} = ${globalSnapshotGroup}
   `;
   const groupHoldingIds = `SELECT id FROM source.holdings WHERE account_id IN (${accountIds})`;
   const latestHoldingSnapshotId = `
@@ -423,12 +430,14 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
       UNION ALL
       SELECT
         -1 AS id,
+        ${selectedProfileId} AS profile_id,
         ${globalSnapshotGroup} AS group_id,
         id AS account_id,
         created_at,
         updated_at
       FROM source.accounts
-      WHERE mf_id = 'unknown'
+      WHERE profile_id = ${selectedProfileId}
+        AND mf_id = 'unknown'
         AND ${selectedGroup} = ${globalSnapshotGroup}
         AND id NOT IN (
           SELECT account_id FROM source.group_accounts WHERE group_id = ${globalSnapshotGroup}
@@ -436,7 +445,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
     CREATE TABLE institution_categories AS
       SELECT * FROM source.institution_categories;
     CREATE TABLE accounts AS
-      SELECT id, NULL AS mf_id, name, type, institution, category_id, created_at, updated_at, is_active
+      SELECT id, profile_id, NULL AS mf_id, name, type, institution, category_id, created_at, updated_at, is_active
       FROM source.accounts
       WHERE id IN (${accountIds});
     CREATE TABLE asset_categories AS
@@ -461,6 +470,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
     CREATE TABLE holdings AS
       SELECT
         id,
+        profile_id,
         NULL AS mf_id,
         account_id,
         category_id,
@@ -498,6 +508,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
       )
       SELECT
         id,
+        profile_id,
         NULL AS mf_id,
         date,
         CASE WHEN account_id IN (${accountIds}) THEN account_id END AS account_id,
@@ -528,7 +539,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
               ON target_group.group_id = source_group.group_id
             WHERE source_group.account_id = source.transactions.account_id
               AND target_group.account_id = source.transactions.transfer_target_account_id
-              AND source_group.group_id <> '0'
+              AND source_group.group_id <> ${globalSnapshotGroup}
           )
           THEN 1
           ELSE 0

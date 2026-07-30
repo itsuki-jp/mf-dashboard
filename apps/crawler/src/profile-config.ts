@@ -112,7 +112,7 @@ export function parseMoneyForwardProfilesConfig(value: unknown): MoneyForwardPro
   }
   if (enabledProfiles.length > 1) {
     throw new Error(
-      "Only one Money Forward profile can be enabled until profile-aware database storage is implemented",
+      "Only one Money Forward profile can be enabled until sequential profile execution is implemented",
     );
   }
 

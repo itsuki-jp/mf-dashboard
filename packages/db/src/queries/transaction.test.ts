@@ -6,7 +6,8 @@ import { getTransactions, getTransactionsByMonth, getTransactionsByAccountId } f
 type Db = Awaited<ReturnType<typeof createTestDb>>;
 let db: Db;
 
-const TEST_GROUP_ID = "test_group_001";
+const TEST_MF_GROUP_ID = "test_group_001";
+const TEST_GROUP_ID = `primary:${TEST_MF_GROUP_ID}`;
 
 beforeAll(async () => {
   db = await createTestDb();
@@ -23,6 +24,8 @@ beforeEach(async () => {
   await db
     .insert(schema.groups)
     .values({
+      profileId: "primary",
+      mfGroupId: TEST_MF_GROUP_ID,
       id: TEST_GROUP_ID,
       name: "Test Group",
       isCurrent: true,
@@ -37,6 +40,7 @@ async function createTestAccount(name: string): Promise<number> {
   const account = await db
     .insert(schema.accounts)
     .values({
+      profileId: "primary",
       mfId: `mf_${name}`,
       name,
       type: "bank",
@@ -49,6 +53,7 @@ async function createTestAccount(name: string): Promise<number> {
   await db
     .insert(schema.groupAccounts)
     .values({
+      profileId: "primary",
       groupId: TEST_GROUP_ID,
       accountId: account.id,
       createdAt: now,
@@ -71,6 +76,7 @@ async function createTransaction(data: {
   await db
     .insert(schema.transactions)
     .values({
+      profileId: "primary",
       mfId: `tx_${Date.now()}_${Math.random()}`,
       date: data.date,
       accountId: data.accountId,
@@ -167,6 +173,7 @@ describe("getTransactionsByMonth", () => {
       const externalAccount = await db
         .insert(schema.accounts)
         .values({
+          profileId: "primary",
           mfId: "external",
           name: "External Account",
           type: "bank",
