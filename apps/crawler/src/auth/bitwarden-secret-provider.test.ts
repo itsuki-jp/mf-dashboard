@@ -9,7 +9,7 @@ const environment = {
 };
 
 describe("BitwardenSecretProvider", () => {
-  test("retrieves and caches Money Forward credentials by secret ID", async () => {
+  test("retrieves fresh Money Forward credentials by secret ID", async () => {
     const getSecretValue = vi.fn<(secretId: string) => Promise<string>>(async (secretId) => {
       if (secretId === "username-id") return "test-user@example.com";
       if (secretId === "password-id") return "test-password";
@@ -26,7 +26,7 @@ describe("BitwardenSecretProvider", () => {
     });
     await provider.getMoneyForwardCredentials();
 
-    expect(getSecretValue).toHaveBeenCalledTimes(2);
+    expect(getSecretValue).toHaveBeenCalledTimes(4);
     expect(getSecretValue).toHaveBeenCalledWith("username-id");
     expect(getSecretValue).toHaveBeenCalledWith("password-id");
   });
@@ -44,24 +44,27 @@ describe("BitwardenSecretProvider", () => {
     await expect(provider.getOneTimePassword()).resolves.toBe("287082");
     await provider.getOneTimePassword();
 
-    expect(getSecretValue).toHaveBeenCalledOnce();
+    expect(getSecretValue).toHaveBeenCalledTimes(2);
     expect(getSecretValue).toHaveBeenCalledWith("totp-id");
   });
 
-  test("rejects a TOTP setup key that is not Base32", async () => {
-    const provider = new BitwardenSecretProvider({
-      environment,
-      secretReader: {
-        getSecretValue: vi
-          .fn<(secretId: string) => Promise<string>>()
-          .mockResolvedValue("not-a-valid-secret-1"),
-      },
-    });
+  test.each(["not-a-valid-secret-1", "A"])(
+    "rejects an invalid or truncated TOTP setup key: %s",
+    async (setupKey) => {
+      const provider = new BitwardenSecretProvider({
+        environment,
+        secretReader: {
+          getSecretValue: vi
+            .fn<(secretId: string) => Promise<string>>()
+            .mockResolvedValue(setupKey),
+        },
+      });
 
-    await expect(provider.getOneTimePassword()).rejects.toThrow(
-      "Bitwarden TOTP secret is not valid Base32",
-    );
-  });
+      await expect(provider.getOneTimePassword()).rejects.toThrow(
+        "Bitwarden TOTP secret must be a 32-character Base32 setup key",
+      );
+    },
+  );
 
   test("requires every configured secret ID", async () => {
     const provider = new BitwardenSecretProvider({

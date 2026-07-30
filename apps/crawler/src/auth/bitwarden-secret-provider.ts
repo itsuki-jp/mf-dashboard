@@ -22,8 +22,8 @@ function requireEnvironmentVariable(environment: NodeJS.ProcessEnv, name: string
 
 function normalizeTotpSecret(value: string): string {
   const normalized = value.replace(/[\s-]/g, "").toUpperCase();
-  if (!/^[A-Z2-7]+=*$/.test(normalized)) {
-    throw new Error("Bitwarden TOTP secret is not valid Base32");
+  if (!/^[A-Z2-7]{32}$/.test(normalized)) {
+    throw new Error("Bitwarden TOTP secret must be a 32-character Base32 setup key");
   }
   return normalized;
 }
@@ -32,8 +32,6 @@ export class BitwardenSecretProvider implements SecretProvider {
   private readonly environment: NodeJS.ProcessEnv;
   private readonly now: () => number;
   private readonly secretReader: SecretReader;
-  private credentialsPromise: Promise<MoneyForwardCredentials> | null = null;
-  private totpSecretPromise: Promise<string> | null = null;
 
   constructor(options: BitwardenSecretProviderOptions = {}) {
     this.environment = options.environment ?? process.env;
@@ -42,28 +40,28 @@ export class BitwardenSecretProvider implements SecretProvider {
       options.secretReader ??
       new BwsSecretClient({
         accessTokenFile: requireEnvironmentVariable(this.environment, "BWS_ACCESS_TOKEN_FILE"),
+        environment: this.environment,
       });
   }
 
   async getMoneyForwardCredentials(): Promise<MoneyForwardCredentials> {
-    this.credentialsPromise ??= Promise.all([
+    const [username, password] = await Promise.all([
       this.secretReader.getSecretValue(
         requireEnvironmentVariable(this.environment, "BWS_USERNAME_SECRET_ID"),
       ),
       this.secretReader.getSecretValue(
         requireEnvironmentVariable(this.environment, "BWS_PASSWORD_SECRET_ID"),
       ),
-    ]).then(([username, password]) => ({ username, password }));
-
-    return this.credentialsPromise;
+    ]);
+    return { username, password };
   }
 
   async getOneTimePassword(): Promise<string> {
-    this.totpSecretPromise ??= this.secretReader
-      .getSecretValue(requireEnvironmentVariable(this.environment, "BWS_TOTP_SECRET_ID"))
-      .then(normalizeTotpSecret);
-
-    const secret = await this.totpSecretPromise;
+    const secret = normalizeTotpSecret(
+      await this.secretReader.getSecretValue(
+        requireEnvironmentVariable(this.environment, "BWS_TOTP_SECRET_ID"),
+      ),
+    );
     const totp = new TOTP({
       algorithm: "SHA1",
       digits: 6,
