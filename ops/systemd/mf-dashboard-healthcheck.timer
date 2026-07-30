@@ -1,0 +1,11 @@
+[Unit]
+Description=Check mf-dashboard every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5m
+Unit=mf-dashboard-healthcheck.service
+
+[Install]
+WantedBy=timers.target

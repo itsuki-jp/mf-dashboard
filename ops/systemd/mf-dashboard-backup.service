@@ -1,0 +1,16 @@
+[Unit]
+Description=Create an encrypted mf-dashboard backup
+After=network-online.target
+OnFailure=mf-dashboard-notify@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/GitHub_Projects/mf-dashboard
+ExecStart=/usr/bin/python3 %h/GitHub_Projects/mf-dashboard/scripts/ops/backup.py
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=default.target

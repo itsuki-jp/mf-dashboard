@@ -241,7 +241,7 @@ docker compose --profile cloudflare up -d
 
 Terraformの適用が成功し、`secrets/cloudflared-token`が作成されたことを確認してからDocker Composeを起動する。`dc`などのシェルエイリアスは環境によって存在しないため、このガイドでは正式な`docker compose`コマンドを使用する。
 
-以降はcrawlerコンテナ内のsupercronicが`crontab`のスケジュールで自動更新する。
+以降はcrawlerコンテナ内のsupercronicが`crontab`のスケジュールで自動更新する。既定値は初期安定性を確認するため毎日6:30（JST）の1回だけである。
 
 各コンテナの役割は次のとおり。
 
@@ -249,7 +249,9 @@ Terraformの適用が成功し、`secrets/cloudflared-token`が作成された�
 - **cloudflared**: Cloudflare Tunnelへ接続する
 - **crawler**: 定期更新と手動更新を受け付け、取得したデータを共有データベースへ保存する
 
-スケジュールを変更する場合は`docker/crawler/crontab`を編集し、`docker compose build crawler`でcrawlerを再ビルドする。
+1日1回で安定運用を確認した後、15:30（JST）の2回目を追加できる。スケジュールを変更する場合は`docker/crawler/crontab`を編集し、`docker compose build crawler`でcrawlerを再ビルドする。
+
+暗号化バックアップ、復元テスト、crawler失敗監視は[バックアップと監視](operations/backup-and-monitoring.md)を参照する。
 
 ### 3.5 TunnelとAccessの動作確認
 

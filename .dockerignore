@@ -24,6 +24,7 @@ debug
 .env.*
 !.env.example
 data/*
+backups/
 secrets/*
 config/money-forward-profiles.json
 apps/crawler/tests/e2e/*.db

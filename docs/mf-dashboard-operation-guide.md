@@ -1077,38 +1077,21 @@ Bitwardenシークレット自体はDBバックアップへ含めない。
 
 ## 28. SQLiteバックアップ
 
-単純な稼働中ファイルコピーではなく、SQLiteのbackup機能を使う。
-
-例:
+単純な稼働中ファイルコピーではなく、`scripts/ops/backup.py`がPython標準SQLiteのbackup APIを使う。バックアップDBの`PRAGMA integrity_check`に成功した後、DB、プロファイル設定、Compose設定をtarへまとめ、Linuxへ秘密鍵を置かずGnuPG公開鍵で暗号化する。
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-BASE="$HOME/services/mf-dashboard"
-DB="$BASE/data/moneyforward.db"
-DEST="$BASE/backups"
-DATE="$(date +%F-%H%M%S)"
-TMP="$DEST/moneyforward-$DATE.db"
-
-mkdir -p "$DEST"
-
-sqlite3 "$DB" ".timeout 10000" ".backup '$TMP'"
-sqlite3 "$TMP" "PRAGMA integrity_check;" | grep -qx "ok"
-
-# ここでage等により暗号化する
-# 暗号化成功後に平文TMPを削除する
+python3 scripts/ops/backup.py
 ```
+
+平文はmode `700`のruntime一時ディレクトリ内だけに作成し、通常終了と例外では削除する。`SIGKILL`や電源断では削除を保証できないため、残存確認とディスク暗号化も必要になる。暗号化途中のファイルは最終名へ切り替えない。具体的な鍵作成、timer、通知設定は[バックアップと監視](operations/backup-and-monitoring.md)に従う。
 
 ### 保持期間
 
-例:
-
 ```text
 日次: 14日
-週次: 8週
-月次: 12か月
 ```
+
+実装の既定値は14日。週次・月次の長期保存は、選定したオフホスト保存先側のversioningやlifecycleも含めて定義する。
 
 ### オフホスト
 
@@ -1127,12 +1110,12 @@ sqlite3 "$TMP" "PRAGMA integrity_check;" | grep -qx "ok"
 
 ## 29. 復元テスト
 
-月1回、バックアップを別ファイルへ復元し、次を確認する。
+月1回、Linux以外の端末で暗号化バックアップを復元し、SQLiteの整合性と必須テーブルの読み取りを確認する。
 
 ```bash
-sqlite3 restored.db "PRAGMA integrity_check;"
-sqlite3 restored.db "SELECT COUNT(*) FROM transactions;"
-sqlite3 restored.db "SELECT COUNT(*) FROM daily_snapshots;"
+python3 scripts/ops/restore_check.py \
+  /path/to/mf-dashboard-YYYYMMDD-HHMMSS.tar.gpg \
+  --identity /protected/path/backup-private-key.asc
 ```
 
 復元テストをしていないバックアップは、存在していても信頼しない。

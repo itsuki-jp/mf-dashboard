@@ -1,0 +1,8 @@
+[Unit]
+Description=Notify that mf-dashboard unit %i failed
+ConditionPathExists=%h/.config/mf-dashboard/alert-webhook
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/GitHub_Projects/mf-dashboard/scripts/ops/notify_failure.py --webhook-file %h/.config/mf-dashboard/alert-webhook --event %i
+UMask=0077
