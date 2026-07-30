@@ -42,11 +42,19 @@ describe("credential access", () => {
 });
 
 describe("createSecretProvider", () => {
-  test("creates the Bitwarden provider", () => {
+  test("creates a profile-scoped Bitwarden provider", () => {
     expect(
-      createSecretProvider({
-        BWS_ACCESS_TOKEN_FILE: "/run/secrets/bws_access_token",
-      }),
+      createSecretProvider(
+        {
+          id: "primary",
+          name: "Primary",
+          enabled: true,
+          usernameSecretId: "username-id",
+          passwordSecretId: "password-id",
+          totpSecretId: "totp-id",
+        },
+        { BWS_ACCESS_TOKEN_FILE: "/run/secrets/bws_access_token" },
+      ),
     ).toBeInstanceOf(BitwardenSecretProvider);
   });
 });

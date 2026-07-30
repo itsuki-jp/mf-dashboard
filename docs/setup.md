@@ -91,18 +91,18 @@ Terraform用のAPI Tokenを発行する。必要な最小権限は次のとお�
 
 ```sh
 cp .env.example .env
+cp config/money-forward-profiles.example.json config/money-forward-profiles.json
+chmod 600 config/money-forward-profiles.json
 openssl rand -hex 32
 ```
 
-この時点では共通設定とBitwardenのSecret IDを`.env`へ設定する。Machine Account token自体は`.env`へ書かない。
+共通設定は`.env`、プロファイルごとのBitwarden Secret IDはGit管理対象外の`config/money-forward-profiles.json`へ設定する。Machine Account token自体はどちらにも書かない。
 
 ```dotenv
 COMPOSE_PATH_SEPARATOR=:
 COMPOSE_FILE=compose.yml:compose.bitwarden.yml
 BWS_ACCESS_TOKEN_HOST_FILE=./secrets/bws-access-token
-BWS_USERNAME_SECRET_ID=<usernameのSecret ID>
-BWS_PASSWORD_SECRET_ID=<passwordのSecret ID>
-BWS_TOTP_SECRET_ID=<TOTPセットアップキーのSecret ID>
+MF_PROFILES_CONFIG_PATH=./config/money-forward-profiles.json
 REFRESH_TOKEN=<openssl rand -hex 32の出力>
 CLOUDFLARE_ACCESS_TEAM_DOMAIN=<team-name>.cloudflareaccess.com
 DASHBOARD_URL=https://dashboard.example.com
@@ -119,12 +119,12 @@ DASHBOARD_URL=https://dashboard.example.com
 | `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraform適用後      | Terraformが作成したAccess ApplicationのAUD                                       |
 | `DASHBOARD_URL`                              | 必須 | Terraform適用前      | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                   |
 | `BWS_ACCESS_TOKEN_HOST_FILE`                 | 必須 | Compose起動前        | Machine Account tokenを保存したowner-read-onlyファイル                           |
-| `BWS_*_SECRET_ID`                            | 必須 | Compose起動前        | username、password、TOTPセットアップキーの各Secret ID                            |
+| `MF_PROFILES_CONFIG_PATH`                    | 必須 | crawler起動前        | Git管理対象外のMoney Forwardプロファイル設定JSON                                 |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 財務インサイト、家計AIチャット、LLMカテゴリ推論。利用する機能では3項目すべて必須 |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                        |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                      |
 | `HOST_UID` / `HOST_GID`                      | 任意 | Compose起動前        | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000`   |
-| `AUTH_STATE_PATH`                            | 任意 | ローカル実行時       | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない         |
+| `AUTH_STATE_ROOT`                            | 任意 | ローカル実行時       | profile別ブラウザーセッションを保存するroot。Docker Composeでは専用volumeを使う  |
 
 Linuxでは`id -u`と`id -g`で値を確認し、`1000:1000`と異なる場合は`.env`の`HOST_UID`と`HOST_GID`へ設定する。web、crawler、cloudflaredが同じUID/GIDで動作し、`./data`とowner-read-onlyのTunnel tokenへ必要な範囲だけアクセスする。
 
@@ -141,22 +141,24 @@ umask 077
 chmod 600 secrets/bws-access-token
 ```
 
-`.env`では値そのものではなく、tokenファイルと3つのSecret IDを指定する。
+`.env`ではtokenファイルとprofile設定ファイルの場所だけを指定する。
 
 ```dotenv
 COMPOSE_PATH_SEPARATOR=:
 COMPOSE_FILE=compose.yml:compose.bitwarden.yml
 BWS_ACCESS_TOKEN_HOST_FILE=./secrets/bws-access-token
-BWS_USERNAME_SECRET_ID=<usernameのSecret ID>
-BWS_PASSWORD_SECRET_ID=<passwordのSecret ID>
-BWS_TOTP_SECRET_ID=<TOTPセットアップキーのSecret ID>
+MF_PROFILES_CONFIG_PATH=./config/money-forward-profiles.json
 ```
+
+`config/money-forward-profiles.json`へprofile ID、表示名、enabled状態、3つのSecret IDを設定する。実ファイルはGitとDocker imageから除外される。DBがprofile対応になるまではデータ衝突を防ぐため、enabledは1件だけにする。2件以上がenabledの場合、crawlerはMoney Forwardへ接続する前に停止する。
+
+profile別のPlaywright認証状態はLinux上のcrawler専用volumeだけへ保存する。credential相当のセッション情報を含むため、GitHub Actions cacheやリポジトリへ保存しない。
 
 crawlerはtokenファイルを`/run/secrets/bws_access_token`としてread-onlyでmountし、`bws`子プロセスの`BWS_ACCESS_TOKEN`環境変数だけへ渡す。Access Token、取得したSecret値、`bws`のstdout/stderrはログへ出力しない。
 
 `pnpm --filter @mf-dashboard/crawler start`などをホストで直接実行する場合は、crawlerが`BWS_ACCESS_TOKEN_HOST_FILE`をリポジトリルート基準で解決する。Docker内では`BWS_ACCESS_TOKEN_FILE=/run/secrets/bws_access_token`が優先される。
 
-`COMPOSE_FILE`を`.env`へ設定し、Bitwarden専用overrideを以後のすべてのCompose操作へ自動適用する。これにより後段の`docker compose build`や`docker compose up -d`でもtokenファイルとSecret IDがcrawlerへ渡る。
+`COMPOSE_FILE`を`.env`へ設定し、Bitwarden専用overrideを以後のすべてのCompose操作へ自動適用する。これにより後段の`docker compose build`や`docker compose up -d`でもtokenファイルがcrawlerへ渡る。profile設定は`./config`からread-onlyでmountされ、認証状態はprofileごとに`<profile-id>.json`へ分離される。
 
 ```sh
 docker compose config --quiet

@@ -1,7 +1,7 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { BrowserContext, Page } from "playwright";
 import { log, debug } from "../logger.js";
-import { getCredentials, getOTP } from "./credentials.js";
+import type { CredentialAccess } from "./credentials.js";
 import { hasAuthState, saveAuthState } from "./state.js";
 
 const TIMEOUTS = {
@@ -45,6 +45,7 @@ async function waitForUrlChange(page: Page, timeout: number = TIMEOUTS.redirect)
 
 async function maybeHandleOtp(
   page: Page,
+  credentialAccess: CredentialAccess,
   {
     inputSelector,
     submitSelector,
@@ -63,7 +64,7 @@ async function maybeHandleOtp(
     await otpInput.waitFor({ state: "visible", timeout });
 
     debug(`${label} OTP required, getting from Secret Provider...`);
-    const otp = await getOTP();
+    const otp = await credentialAccess.getOTP();
     await otpInput.fill(otp);
     debug("Clicking verify button...");
     await page.locator(submitSelector).first().click();
@@ -109,9 +110,18 @@ async function isSessionValid(page: Page): Promise<boolean> {
 /**
  * Login with auth state if available, otherwise perform full login
  */
-export async function loginWithAuthState(page: Page, context: BrowserContext): Promise<void> {
+export async function loginWithAuthState(
+  page: Page,
+  context: BrowserContext,
+  options: {
+    credentialAccess: CredentialAccess;
+    environment?: NodeJS.ProcessEnv;
+    profileId: string;
+  },
+): Promise<void> {
+  const { credentialAccess, environment = process.env, profileId } = options;
   // If auth state exists, check if session is valid
-  if (hasAuthState()) {
+  if (hasAuthState(profileId, environment)) {
     debug("Auth state found, checking session validity...");
 
     const valid = await isSessionValid(page);
@@ -126,14 +136,14 @@ export async function loginWithAuthState(page: Page, context: BrowserContext): P
   }
 
   // Perform full login
-  await login(page);
+  await login(page, credentialAccess);
 
   // Save auth state after successful login
-  await saveAuthState(context);
+  await saveAuthState(context, profileId, environment);
 }
 
-export async function login(page: Page): Promise<void> {
-  const { username, password } = await getCredentials();
+export async function login(page: Page, credentialAccess: CredentialAccess): Promise<void> {
+  const { username, password } = await credentialAccess.getCredentials();
 
   debug("Navigating to login page...");
   await page.goto(mfUrls.auth.signIn, {
@@ -162,7 +172,7 @@ export async function login(page: Page): Promise<void> {
   await page.locator(SELECTORS.mfidSubmit).click();
 
   // Check if OTP is required
-  await maybeHandleOtp(page, {
+  await maybeHandleOtp(page, credentialAccess, {
     inputSelector: SELECTORS.mfidOtpInput,
     submitSelector: SELECTORS.mfidOtpSubmit,
     label: "MFID",

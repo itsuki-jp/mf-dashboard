@@ -36,9 +36,6 @@ jobs:
       DASHBOARD_URL: https://dashboard.example.com
       REFRESH_TOKEN: ci-refresh-token
       BWS_ACCESS_TOKEN_HOST_FILE: .env.example
-      BWS_PASSWORD_SECRET_ID: 00000000-0000-4000-8000-000000000002
-      BWS_TOTP_SECRET_ID: 00000000-0000-4000-8000-000000000003
-      BWS_USERNAME_SECRET_ID: 00000000-0000-4000-8000-000000000001
     strategy:
       fail-fast: false
       matrix:

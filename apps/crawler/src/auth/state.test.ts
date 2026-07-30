@@ -1,61 +1,100 @@
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { getAuthStatePath, hasAuthState, saveAuthState } from "./state.js";
 
-type AnyMock = (...args: any[]) => any;
+let temporaryRoot: string;
 
-// Mock fs module
-vi.mock("node:fs", () => ({
-  existsSync: vi.fn<AnyMock>(),
-}));
+beforeEach(async () => {
+  temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "mf-auth-state-"));
+});
 
-import { existsSync } from "node:fs";
-import { getAuthStatePath, hasAuthState } from "./state.js";
+afterEach(async () => {
+  await rm(temporaryRoot, { recursive: true, force: true });
+});
 
-describe("state", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe("getAuthStatePath", () => {
+  test("returns a different file for each validated profile", () => {
+    const environment = { AUTH_STATE_ROOT: temporaryRoot };
+
+    expect(getAuthStatePath("primary", environment)).toBe(path.join(temporaryRoot, "primary.json"));
+    expect(getAuthStatePath("secondary", environment)).toBe(
+      path.join(temporaryRoot, "secondary.json"),
+    );
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllEnvs();
+  test.each(["../primary", "primary/other", "primary\\other", "Primary", "profile id"])(
+    "rejects an unsafe profile ID before constructing a path: %s",
+    (profileId) => {
+      expect(() => getAuthStatePath(profileId, { AUTH_STATE_ROOT: temporaryRoot })).toThrow(
+        "Money Forward profile ID is invalid",
+      );
+    },
+  );
+});
+
+describe("hasAuthState", () => {
+  test("checks only the selected profile file", () => {
+    const fileExists = vi.fn<(filePath: string) => boolean>((filePath) =>
+      filePath.endsWith("primary.json"),
+    );
+    const environment = { AUTH_STATE_ROOT: temporaryRoot };
+
+    expect(hasAuthState("primary", environment, fileExists)).toBe(true);
+    expect(hasAuthState("secondary", environment, fileExists)).toBe(false);
+    expect(fileExists).toHaveBeenNthCalledWith(1, path.join(temporaryRoot, "primary.json"));
+    expect(fileExists).toHaveBeenNthCalledWith(2, path.join(temporaryRoot, "secondary.json"));
+  });
+});
+
+describe("saveAuthState", () => {
+  test("atomically replaces only the selected profile state after a successful write", async () => {
+    const destination = path.join(temporaryRoot, "primary.json");
+    await writeFile(destination, "old-state", "utf8");
+    let modeDuringWrite: number | null = null;
+    const context = {
+      storageState: vi.fn<(options: { path: string }) => Promise<void>>(
+        async ({ path: outputPath }) => {
+          modeDuringWrite = (await stat(outputPath)).mode & 0o777;
+          await writeFile(outputPath, "new-state", "utf8");
+        },
+      ),
+    };
+
+    await saveAuthState(context as unknown as Parameters<typeof saveAuthState>[0], "primary", {
+      AUTH_STATE_ROOT: temporaryRoot,
+    });
+
+    await expect(readFile(destination, "utf8")).resolves.toBe("new-state");
+    const expectedMode = process.platform === "win32" ? 0o666 : 0o600;
+    expect(modeDuringWrite).toBe(expectedMode);
+    expect((await stat(destination)).mode & 0o777).toBe(expectedMode);
+    await expect(readFile(path.join(temporaryRoot, "secondary.json"), "utf8")).rejects.toThrow(
+      /ENOENT/,
+    );
   });
 
-  describe("getAuthStatePath", () => {
-    test("returns path to auth-state.json in data directory", () => {
-      const result = getAuthStatePath();
-      const expectedPath = path.resolve(import.meta.dirname, "../../../../data/auth-state.json");
+  test("preserves the existing profile state when the new state write fails", async () => {
+    const destination = path.join(temporaryRoot, "primary.json");
+    await writeFile(destination, "old-state", "utf8");
+    const context = {
+      storageState: vi.fn<(options: { path: string }) => Promise<void>>(
+        async ({ path: outputPath }) => {
+          await writeFile(outputPath, "partial-state", "utf8");
+          throw new Error("storage state write failed");
+        },
+      ),
+    };
 
-      expect(result).toBe(expectedPath);
-      expect(path.isAbsolute(result)).toBe(true);
-    });
+    await expect(
+      saveAuthState(context as unknown as Parameters<typeof saveAuthState>[0], "primary", {
+        AUTH_STATE_ROOT: temporaryRoot,
+      }),
+    ).rejects.toThrow("storage state write failed");
 
-    test("returns configured AUTH_STATE_PATH when set", () => {
-      vi.stubEnv("AUTH_STATE_PATH", "/app/crawler-state/auth-state.json");
-
-      const result = getAuthStatePath();
-
-      expect(result).toBe("/app/crawler-state/auth-state.json");
-    });
-  });
-
-  describe("hasAuthState", () => {
-    test("returns true when auth state file exists", () => {
-      vi.stubEnv("AUTH_STATE_PATH", "/app/crawler-state/auth-state.json");
-      vi.mocked(existsSync).mockReturnValue(true);
-
-      const result = hasAuthState();
-
-      expect(result).toBe(true);
-      expect(existsSync).toHaveBeenCalledWith("/app/crawler-state/auth-state.json");
-    });
-
-    test("returns false when auth state file does not exist", () => {
-      vi.mocked(existsSync).mockReturnValue(false);
-
-      const result = hasAuthState();
-
-      expect(result).toBe(false);
-    });
+    await expect(readFile(destination, "utf8")).resolves.toBe("old-state");
+    const remainingFiles = await readdir(temporaryRoot);
+    expect(remainingFiles).toEqual(["primary.json"]);
   });
 });

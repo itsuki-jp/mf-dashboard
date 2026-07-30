@@ -1,6 +1,3 @@
-import { loginWithAuthState } from "@mf-dashboard/crawler/auth/login";
-import { hasAuthState } from "@mf-dashboard/crawler/auth/state";
-import { createBrowserContext } from "@mf-dashboard/crawler/browser/context";
 import { switchGroup, createGroupScope } from "@mf-dashboard/crawler/scrapers/group";
 import { scrapeMonthlySummary } from "@mf-dashboard/crawler/scrapers/monthly-summary";
 import {
@@ -9,7 +6,7 @@ import {
   getAllGroups as getDbGroups,
   closeDb,
 } from "@mf-dashboard/db";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright";
 /**
  * Monthly Summary E2E Test
  *
@@ -17,23 +14,18 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
  * DB から計算した getMonthlySummaryByMonth の結果を比較する
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { launchProfileSession, loadProfileWithAuthState } from "./profile-session";
 
-describe("Monthly Summary比較: スクレイピング vs DB", () => {
+const profile = await loadProfileWithAuthState();
+
+describe.skipIf(!profile)("Monthly Summary比較: スクレイピング vs DB", () => {
   let browser: Browser;
   let context: BrowserContext;
   let page: Page;
 
   beforeAll(async () => {
-    if (!hasAuthState()) {
-      throw new Error(
-        "auth-state.json が見つかりません。先にcrawlerを実行してログインしてください。",
-      );
-    }
-
-    browser = await chromium.launch({ headless: true });
-    context = await createBrowserContext(browser, { useAuthState: true });
-    page = await context.newPage();
-    await loginWithAuthState(page, context);
+    if (!profile) return;
+    ({ browser, context, page } = await launchProfileSession(profile));
   }, 60000);
 
   afterAll(async () => {

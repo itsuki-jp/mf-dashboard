@@ -2,9 +2,6 @@ services:
   crawler:
     environment:
       BWS_ACCESS_TOKEN_FILE: /run/secrets/bws_access_token
-      BWS_PASSWORD_SECRET_ID: ${BWS_PASSWORD_SECRET_ID:?Set BWS_PASSWORD_SECRET_ID}
-      BWS_TOTP_SECRET_ID: ${BWS_TOTP_SECRET_ID:?Set BWS_TOTP_SECRET_ID}
-      BWS_USERNAME_SECRET_ID: ${BWS_USERNAME_SECRET_ID:?Set BWS_USERNAME_SECRET_ID}
     secrets:
       - bws_access_token
 

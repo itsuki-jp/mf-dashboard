@@ -24,16 +24,16 @@ import { createGroupScope } from "./scrapers/group.js";
 import { notifyWebRefresh } from "./web-refresh.js";
 
 export async function runCrawler(progress: CrawlerProgressReporter): Promise<void> {
-  const config = runLoadPhase();
+  const { crawler: config, profile } = await runLoadPhase();
   let runtime: CrawlerRuntime | null = null;
 
   try {
-    const activeRuntime = await runSetupPhase(config);
+    const activeRuntime = await runSetupPhase(config, profile);
     runtime = activeRuntime;
     await runCrawlerStep(
       progress,
       CRAWLER_STEPS.authentication,
-      () => runAuthPhase(activeRuntime.page, activeRuntime.context),
+      () => runAuthPhase(activeRuntime.page, activeRuntime.context, profile),
       { failureCode: "auth_failed" },
     );
 
