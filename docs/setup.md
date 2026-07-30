@@ -154,6 +154,8 @@ BWS_TOTP_SECRET_ID=<TOTPセットアップキーのSecret ID>
 
 crawlerはtokenファイルを`/run/secrets/bws_access_token`としてread-onlyでmountし、`bws`子プロセスの`BWS_ACCESS_TOKEN`環境変数だけへ渡す。Access Token、取得したSecret値、`bws`のstdout/stderrはログへ出力しない。
 
+`pnpm --filter @mf-dashboard/crawler start`などをホストで直接実行する場合は、crawlerが`BWS_ACCESS_TOKEN_HOST_FILE`をリポジトリルート基準で解決する。Docker内では`BWS_ACCESS_TOKEN_FILE=/run/secrets/bws_access_token`が優先される。
+
 `COMPOSE_FILE`を`.env`へ設定し、Bitwarden専用overrideを以後のすべてのCompose操作へ自動適用する。これにより後段の`docker compose build`や`docker compose up -d`でもtokenファイルとSecret IDがcrawlerへ渡る。
 
 ```sh

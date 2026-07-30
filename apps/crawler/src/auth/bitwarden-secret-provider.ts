@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Secret, TOTP } from "otpauth";
 import { BwsSecretClient } from "./bws-secret-client.js";
 import type { MoneyForwardCredentials, SecretProvider } from "./secret-provider.js";
@@ -20,6 +21,21 @@ function requireEnvironmentVariable(environment: NodeJS.ProcessEnv, name: string
   return value;
 }
 
+export function resolveBitwardenAccessTokenFile(environment: NodeJS.ProcessEnv): string {
+  const containerPath = environment.BWS_ACCESS_TOKEN_FILE?.trim();
+  if (containerPath) {
+    return containerPath;
+  }
+
+  const hostPath = environment.BWS_ACCESS_TOKEN_HOST_FILE?.trim();
+  if (hostPath) {
+    const repositoryRoot = path.resolve(import.meta.dirname, "../../../..");
+    return path.resolve(repositoryRoot, hostPath);
+  }
+
+  throw new Error("BWS_ACCESS_TOKEN_FILE or BWS_ACCESS_TOKEN_HOST_FILE is not configured");
+}
+
 function normalizeTotpSecret(value: string): string {
   const normalized = value.replace(/[\s-]/g, "").toUpperCase();
   if (!/^[A-Z2-7]{32}$/.test(normalized)) {
@@ -39,7 +55,7 @@ export class BitwardenSecretProvider implements SecretProvider {
     this.secretReader =
       options.secretReader ??
       new BwsSecretClient({
-        accessTokenFile: requireEnvironmentVariable(this.environment, "BWS_ACCESS_TOKEN_FILE"),
+        accessTokenFile: resolveBitwardenAccessTokenFile(this.environment),
         environment: this.environment,
       });
   }

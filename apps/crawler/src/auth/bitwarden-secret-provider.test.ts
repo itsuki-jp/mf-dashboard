@@ -1,5 +1,9 @@
+import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import { BitwardenSecretProvider } from "./bitwarden-secret-provider.js";
+import {
+  BitwardenSecretProvider,
+  resolveBitwardenAccessTokenFile,
+} from "./bitwarden-secret-provider.js";
 
 const environment = {
   BWS_ACCESS_TOKEN_FILE: "/run/secrets/bws_access_token",
@@ -77,6 +81,31 @@ describe("BitwardenSecretProvider", () => {
 
     await expect(provider.getMoneyForwardCredentials()).rejects.toThrow(
       "BWS_USERNAME_SECRET_ID is not configured",
+    );
+  });
+});
+
+describe("resolveBitwardenAccessTokenFile", () => {
+  test("prefers the container-specific token path", () => {
+    expect(
+      resolveBitwardenAccessTokenFile({
+        BWS_ACCESS_TOKEN_FILE: "/run/secrets/bws_access_token",
+        BWS_ACCESS_TOKEN_HOST_FILE: "./secrets/bws-access-token",
+      }),
+    ).toBe("/run/secrets/bws_access_token");
+  });
+
+  test("resolves the host token path from the repository root", () => {
+    expect(
+      resolveBitwardenAccessTokenFile({
+        BWS_ACCESS_TOKEN_HOST_FILE: "./secrets/bws-access-token",
+      }),
+    ).toBe(path.resolve(import.meta.dirname, "../../../../secrets/bws-access-token"));
+  });
+
+  test("requires a token file path", () => {
+    expect(() => resolveBitwardenAccessTokenFile({})).toThrow(
+      "BWS_ACCESS_TOKEN_FILE or BWS_ACCESS_TOKEN_HOST_FILE is not configured",
     );
   });
 });
