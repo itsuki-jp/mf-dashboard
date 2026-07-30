@@ -1,7 +1,7 @@
 import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
-  ignoreBinaries: ["ps"],
+  ignoreBinaries: ["bws", "ps"],
   ignoreDependencies: ["lefthook"],
   workspaces: {
     "apps/crawler": {
