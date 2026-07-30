@@ -139,10 +139,10 @@ export async function loadMoneyForwardProfilesConfig(
 
 export function getEnabledMoneyForwardProfiles(
   config: MoneyForwardProfilesConfig,
-): MoneyForwardProfile[] {
+): [MoneyForwardProfile, ...MoneyForwardProfile[]] {
   const profiles = config.profiles.filter(({ enabled }) => enabled);
   if (profiles.length === 0) {
     throw new Error("Money Forward profiles config must enable at least one profile");
   }
-  return profiles;
+  return profiles as [MoneyForwardProfile, ...MoneyForwardProfile[]];
 }

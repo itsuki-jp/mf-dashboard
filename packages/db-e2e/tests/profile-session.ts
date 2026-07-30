@@ -3,7 +3,7 @@ import { loginWithAuthState } from "@mf-dashboard/crawler/auth/login";
 import { hasAuthState } from "@mf-dashboard/crawler/auth/state";
 import { createBrowserContext } from "@mf-dashboard/crawler/browser/context";
 import {
-  getEnabledMoneyForwardProfile,
+  getEnabledMoneyForwardProfiles,
   loadMoneyForwardProfilesConfig,
   resolveMoneyForwardProfilesConfigPath,
   type MoneyForwardProfile,
@@ -13,7 +13,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 export async function loadProfileWithAuthState(): Promise<MoneyForwardProfile | null> {
   if (!existsSync(resolveMoneyForwardProfilesConfigPath())) return null;
 
-  const profile = getEnabledMoneyForwardProfile(await loadMoneyForwardProfilesConfig());
+  const [profile] = getEnabledMoneyForwardProfiles(await loadMoneyForwardProfilesConfig());
   return hasAuthState(profile.id) ? profile : null;
 }
 
