@@ -1,7 +1,9 @@
 import path from "node:path";
-import { loginWithAuthState } from "@mf-dashboard/crawler/auth/login";
-import { createBrowserContext } from "@mf-dashboard/crawler/browser/context";
-import { chromium } from "playwright";
+import {
+  getEnabledMoneyForwardProfile,
+  loadMoneyForwardProfilesConfig,
+} from "@mf-dashboard/crawler/profile-config";
+import { launchProfileSession } from "./profile-session";
 
 const ROOT_ENV_PATH = path.resolve(process.cwd(), "../../.env");
 
@@ -13,12 +15,10 @@ export async function setup() {
   }
 
   console.log("Setting up E2E tests...");
-  const browser = await chromium.launch({ headless: true });
-  const context = await createBrowserContext(browser, { useAuthState: true });
-  const page = await context.newPage();
+  const profile = getEnabledMoneyForwardProfile(await loadMoneyForwardProfilesConfig());
+  const { browser } = await launchProfileSession(profile);
 
   try {
-    await loginWithAuthState(page, context);
     console.log("Login successful, auth state ready");
   } finally {
     await browser.close();

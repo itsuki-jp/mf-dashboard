@@ -1,6 +1,3 @@
-import { loginWithAuthState } from "@mf-dashboard/crawler/auth/login";
-import { hasAuthState } from "@mf-dashboard/crawler/auth/state";
-import { createBrowserContext } from "@mf-dashboard/crawler/browser/context";
 import {
   getAllGroups as getPageGroups,
   switchGroup,
@@ -8,34 +5,25 @@ import {
 } from "@mf-dashboard/crawler/scrapers/group";
 import { getPortfolio } from "@mf-dashboard/crawler/scrapers/portfolio";
 import { getDb, closeDb, getAllGroups as getDbGroups } from "@mf-dashboard/db";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
   compareHoldings,
   formatHoldingComparisonResult,
   type HoldingComparison,
 } from "../src/compare/holdings";
+import { launchProfileSession, loadProfileWithAuthState } from "./profile-session";
 
-describe.skipIf(!hasAuthState())("Holdings比較: スクレイピング vs DB", () => {
+const profile = await loadProfileWithAuthState();
+
+describe.skipIf(!profile)("Holdings比較: スクレイピング vs DB", () => {
   let browser: Browser;
   let context: BrowserContext;
   let page: Page;
 
   beforeAll(async () => {
-    // authStateが存在しない場合はスキップ
-    if (!hasAuthState()) {
-      throw new Error(
-        "auth-state.json が見つかりません。先にcrawlerを実行してログインしてください。",
-      );
-    }
-
-    browser = await chromium.launch({
-      headless: true,
-    });
-
-    context = await createBrowserContext(browser, { useAuthState: true });
-    page = await context.newPage();
-    await loginWithAuthState(page, context);
+    if (!profile) return;
+    ({ browser, context, page } = await launchProfileSession(profile));
   });
 
   afterAll(async () => {

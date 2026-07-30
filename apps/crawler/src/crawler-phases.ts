@@ -11,6 +11,7 @@ import {
 } from "@mf-dashboard/db/repository/transactions";
 import type { CashFlowItem } from "@mf-dashboard/db/types";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { createProfileCredentialAccess } from "./auth/credentials.js";
 import { loginWithAuthState } from "./auth/login.js";
 import { hasAuthState } from "./auth/state.js";
 import { createBrowserContext } from "./browser/context.js";
@@ -30,6 +31,11 @@ import { getHistoryMaxMonths, getHistoryMonth } from "./history-months.js";
 import { runHooks } from "./hooks/runner.js";
 import { debug, error, info, log, phase, warn } from "./logger.js";
 import { sendFailureNotifications, sendSuccessNotifications } from "./notification.js";
+import {
+  getEnabledMoneyForwardProfile,
+  loadMoneyForwardProfilesConfig,
+  type MoneyForwardProfile,
+} from "./profile-config.js";
 import { scrapeAllGroups, type GroupData, type ScrapeResult } from "./scraper.js";
 import { scrapeCashFlowHistory } from "./scrapers/cash-flow-history.js";
 import { isNoGroup, switchGroup, NO_GROUP_ID } from "./scrapers/group.js";
@@ -59,18 +65,28 @@ export interface CrawlerRuntime {
   categoryDecision: CategoryDecisionRuntime;
 }
 
+export interface CrawlerRunConfiguration {
+  crawler: CrawlerConfig;
+  profile: MoneyForwardProfile;
+}
+
 export interface CategoryDecisionRuntime {
   config: NormalizedCategoryDecisionConfig | null;
   usage: CategoryDecisionUsage;
 }
 
-export function runLoadPhase(): CrawlerConfig {
+export async function runLoadPhase(): Promise<CrawlerRunConfiguration> {
   phase("Load");
   loadEnvFile();
 
-  const config = loadCrawlerConfig();
+  const profilesConfig = await loadMoneyForwardProfilesConfig();
+  const profile = getEnabledMoneyForwardProfile(profilesConfig);
+  const config = loadCrawlerConfig(process.env, existsSync, () =>
+    hasAuthState(profile.id, process.env),
+  );
   logCrawlerOptions(config);
-  return config;
+  info(`Active Money Forward profile: ${profile.id}`);
+  return { crawler: config, profile };
 }
 
 function loadEnvFile(envPath = DEFAULT_ENV_PATH): void {
@@ -82,9 +98,9 @@ function loadEnvFile(envPath = DEFAULT_ENV_PATH): void {
 }
 
 export function loadCrawlerConfig(
-  env: NodeJS.ProcessEnv = process.env,
-  fileExists: (filePath: string) => boolean = existsSync,
-  authStateExists: () => boolean = hasAuthState,
+  env: NodeJS.ProcessEnv,
+  fileExists: (filePath: string) => boolean,
+  authStateExists: () => boolean,
 ): CrawlerConfig {
   const skipRefresh = env.SKIP_REFRESH === "true";
   const cleanupGroups = env.CLEANUP_GROUPS === "true";
@@ -115,7 +131,11 @@ function logCrawlerOptions(config: CrawlerConfig): void {
   log(`AUTH_STATE:     ${config.authState}`);
 }
 
-export async function runSetupPhase(config: CrawlerConfig): Promise<CrawlerRuntime> {
+export async function runSetupPhase(
+  config: CrawlerConfig,
+  profile: MoneyForwardProfile,
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<CrawlerRuntime> {
   phase("Setup");
   info("Initializing database");
   const db = await initDb();
@@ -128,7 +148,11 @@ export async function runSetupPhase(config: CrawlerConfig): Promise<CrawlerRunti
       headless: !config.isHeaded,
     });
 
-    const context = await createBrowserContext(browser, { useAuthState: true });
+    const context = await createBrowserContext(browser, {
+      environment,
+      profileId: profile.id,
+      useAuthState: true,
+    });
     const page = await context.newPage();
 
     return {
@@ -160,10 +184,19 @@ async function loadCategoryDecisionRuntime(): Promise<CategoryDecisionRuntime> {
   };
 }
 
-export async function runAuthPhase(page: Page, context: BrowserContext): Promise<void> {
+export async function runAuthPhase(
+  page: Page,
+  context: BrowserContext,
+  profile: MoneyForwardProfile,
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
   phase("Auth");
   info("Authenticating");
-  await loginWithAuthState(page, context);
+  await loginWithAuthState(page, context, {
+    credentialAccess: createProfileCredentialAccess(profile, environment),
+    environment,
+    profileId: profile.id,
+  });
 
   info("Running hooks");
   await runHooks(page);

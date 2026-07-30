@@ -10,6 +10,9 @@ const DEFAULT_TIMEOUT = 5000;
 const NAVIGATION_TIMEOUT = 30000;
 
 type CreateContextOptions = {
+  environment?: NodeJS.ProcessEnv;
+  /** 認証状態を分離する検証済みprofile ID */
+  profileId?: string;
   /** storageStateのパスを直接指定（テスト用） */
   storageStatePath?: string;
   /** trueの場合、hasAuthState()をチェックしてstorageStateを設定（本番用） */
@@ -20,14 +23,17 @@ export async function createBrowserContext(
   browser: Browser,
   options: CreateContextOptions = {},
 ): Promise<BrowserContext> {
-  const { storageStatePath, useAuthState = false } = options;
+  const { environment = process.env, profileId, storageStatePath, useAuthState = false } = options;
 
   // storageStateの決定
   let storageState: string | undefined;
   if (storageStatePath) {
     storageState = storageStatePath;
-  } else if (useAuthState && hasAuthState()) {
-    storageState = getAuthStatePath();
+  } else if (useAuthState) {
+    if (!profileId) throw new Error("profileId is required when auth state is enabled");
+    if (hasAuthState(profileId, environment)) {
+      storageState = getAuthStatePath(profileId, environment);
+    }
   }
 
   const context = await browser.newContext({

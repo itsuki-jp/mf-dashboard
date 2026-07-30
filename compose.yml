@@ -59,7 +59,7 @@ services:
       AI_API_KEY: ${AI_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
       AI_PROVIDER: ${AI_PROVIDER:-}
-      AUTH_STATE_PATH: /app/crawler-state/auth-state.json
+      AUTH_STATE_ROOT: /app/crawler-state
       CLEANUP_GROUPS: ${CLEANUP_GROUPS:-}
       CRAWLER_HOST: 0.0.0.0
       DASHBOARD_URL: ${DASHBOARD_URL:-}
@@ -70,6 +70,7 @@ services:
       HEADED: ${HEADED:-}
       HOME: /tmp
       MAX_WAIT_MINUTES: ${MAX_WAIT_MINUTES:-}
+      MF_PROFILES_CONFIG_PATH: /app/config/money-forward-profiles.json
       NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
       REFRESH_MAX_ATTEMPTS: ${REFRESH_MAX_ATTEMPTS:-}
       REFRESH_RETRY_DELAY: ${REFRESH_RETRY_DELAY:-}
@@ -82,6 +83,7 @@ services:
       WEB_URL: ${WEB_URL:-http://web:8765}
     volumes:
       - ./data:/app/data
+      - ./config:/app/config:ro
       - crawler_auth_state:/app/crawler-state
     expose:
       - "8766"

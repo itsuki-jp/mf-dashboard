@@ -26,6 +26,7 @@ data/*
 *.db-shm
 *.db-wal
 secrets/
+config/money-forward-profiles.json
 
 playwright-report
 test-results

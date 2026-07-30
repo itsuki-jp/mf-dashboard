@@ -2,8 +2,13 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import { chromium } from "playwright";
+import { createProfileCredentialAccess } from "../../src/auth/credentials.js";
 import { loginWithAuthState } from "../../src/auth/login.js";
 import { createBrowserContext } from "../../src/browser/context.js";
+import {
+  getEnabledMoneyForwardProfile,
+  loadMoneyForwardProfilesConfig,
+} from "../../src/profile-config.js";
 import { getCurrentGroup, switchGroup } from "../../src/scrapers/group.js";
 
 export const SCREENSHOT_DIR = path.resolve(process.cwd(), "tests/e2e/screenshots");
@@ -26,12 +31,19 @@ export async function setup() {
   }
 
   console.log("Setting up E2E tests...");
+  const profile = getEnabledMoneyForwardProfile(await loadMoneyForwardProfilesConfig());
   const browser = await chromium.launch({ headless: true });
-  const context = await createBrowserContext(browser, { useAuthState: true });
+  const context = await createBrowserContext(browser, {
+    profileId: profile.id,
+    useAuthState: true,
+  });
   const page = await context.newPage();
 
   try {
-    await loginWithAuthState(page, context);
+    await loginWithAuthState(page, context, {
+      credentialAccess: createProfileCredentialAccess(profile),
+      profileId: profile.id,
+    });
     console.log("Login successful, auth state ready");
 
     // ホームに遷移してデフォルトグループをキャプチャ
@@ -51,8 +63,12 @@ export async function teardown() {
   }
 
   console.log("Restoring default group state");
+  const profile = getEnabledMoneyForwardProfile(await loadMoneyForwardProfilesConfig());
   const browser = await chromium.launch({ headless: true });
-  const context = await createBrowserContext(browser, { useAuthState: true });
+  const context = await createBrowserContext(browser, {
+    profileId: profile.id,
+    useAuthState: true,
+  });
   const page = await context.newPage();
 
   try {

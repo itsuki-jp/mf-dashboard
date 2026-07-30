@@ -166,7 +166,7 @@ pnpm --filter @mf-dashboard/crawler dev:scrape
 ```
 
 - When an LLM agent runs scraping, use `dev:scrape`.
-- If `data/auth-state.json` exists, it is used automatically.
+- If the selected profile has an auth-state file below `AUTH_STATE_ROOT`, it is used automatically.
 - Save crawler screenshots in `apps/crawler/debug/`.
 - To log in with saved auth state, use `loginWithAuthState` from `apps/crawler/src/auth/login.ts`.
 

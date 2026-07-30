@@ -7,10 +7,8 @@ import {
 
 const environment = {
   BWS_ACCESS_TOKEN_FILE: "/run/secrets/bws_access_token",
-  BWS_PASSWORD_SECRET_ID: "password-id",
-  BWS_TOTP_SECRET_ID: "totp-id",
-  BWS_USERNAME_SECRET_ID: "username-id",
 };
+const secretIds = { password: "password-id", totp: "totp-id", username: "username-id" };
 
 describe("BitwardenSecretProvider", () => {
   test("retrieves fresh Money Forward credentials by secret ID", async () => {
@@ -21,6 +19,7 @@ describe("BitwardenSecretProvider", () => {
     });
     const provider = new BitwardenSecretProvider({
       environment,
+      secretIds,
       secretReader: { getSecretValue },
     });
 
@@ -42,6 +41,7 @@ describe("BitwardenSecretProvider", () => {
     const provider = new BitwardenSecretProvider({
       environment,
       now: () => 59_000,
+      secretIds,
       secretReader: { getSecretValue },
     });
 
@@ -57,6 +57,7 @@ describe("BitwardenSecretProvider", () => {
     async (setupKey) => {
       const provider = new BitwardenSecretProvider({
         environment,
+        secretIds,
         secretReader: {
           getSecretValue: vi
             .fn<(secretId: string) => Promise<string>>()
@@ -69,20 +70,6 @@ describe("BitwardenSecretProvider", () => {
       );
     },
   );
-
-  test("requires every configured secret ID", async () => {
-    const provider = new BitwardenSecretProvider({
-      environment: {
-        BWS_ACCESS_TOKEN_FILE: "/run/secrets/bws_access_token",
-        BWS_PASSWORD_SECRET_ID: "password-id",
-      },
-      secretReader: { getSecretValue: vi.fn<(secretId: string) => Promise<string>>() },
-    });
-
-    await expect(provider.getMoneyForwardCredentials()).rejects.toThrow(
-      "BWS_USERNAME_SECRET_ID is not configured",
-    );
-  });
 });
 
 describe("resolveBitwardenAccessTokenFile", () => {

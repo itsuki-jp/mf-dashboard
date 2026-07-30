@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./auth/credentials": "./src/auth/credentials.ts",
     "./auth/login": "./src/auth/login.ts",
     "./auth/state": "./src/auth/state.ts",
     "./browser/context": "./src/browser/context.ts",
+    "./profile-config": "./src/profile-config.ts",
     "./scrapers/group": "./src/scrapers/group.ts",
     "./scrapers/cash-flow-history": "./src/scrapers/cash-flow-history.ts",
     "./scrapers/monthly-summary": "./src/scrapers/monthly-summary.ts",

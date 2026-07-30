@@ -39,16 +39,26 @@ let tempDir: string;
 beforeEach(async () => {
   vi.clearAllMocks();
   tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-run-progress-"));
-  vi.mocked(runLoadPhase).mockReturnValue({
-    skipRefresh: false,
-    cleanupGroups: false,
-    authState: "configured",
-    dbPath: "/tmp/demo.db",
-    dbExists: true,
-    scrapeMode: "month",
-    isHistoryMode: false,
-    isDebug: false,
-    isHeaded: false,
+  vi.mocked(runLoadPhase).mockResolvedValue({
+    crawler: {
+      skipRefresh: false,
+      cleanupGroups: false,
+      authState: "configured",
+      dbPath: "/tmp/demo.db",
+      dbExists: true,
+      scrapeMode: "month",
+      isHistoryMode: false,
+      isDebug: false,
+      isHeaded: false,
+    },
+    profile: {
+      id: "primary",
+      name: "Primary",
+      enabled: true,
+      usernameSecretId: "username-id",
+      passwordSecretId: "password-id",
+      totpSecretId: "totp-id",
+    },
   });
   vi.mocked(runSetupPhase).mockResolvedValue({
     db: {} as never,
@@ -109,6 +119,20 @@ afterEach(async () => {
 });
 
 describe("runCrawler progress", () => {
+  test("profile config load failure stops before browser and database setup", async () => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+    vi.mocked(runLoadPhase).mockRejectedValueOnce(new Error("invalid profile config"));
+
+    await expect(runCrawler(progress)).rejects.toThrow("invalid profile config");
+
+    expect(runSetupPhase).not.toHaveBeenCalled();
+    expect(runAuthPhase).not.toHaveBeenCalled();
+  });
+
   test("atomic database save失敗を database save step に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
@@ -151,6 +175,15 @@ describe("runCrawler progress", () => {
       { step: "web_cache_refresh", status: "done" },
     ]);
     expect(runAuthPhase).toHaveBeenCalledOnce();
+    expect(runAuthPhase).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ id: "primary" }),
+    );
+    expect(runSetupPhase).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "primary" }),
+    );
     expect(runSavePhase).toHaveBeenCalledOnce();
     expect(runInstitutionCategoryPhase).toHaveBeenCalledOnce();
     expect(runCashFlowHistoryPhase).toHaveBeenCalledOnce();
@@ -158,16 +191,26 @@ describe("runCrawler progress", () => {
   });
 
   test("history replacementsをcurrent dataと同じsave phaseへ渡す", async () => {
-    vi.mocked(runLoadPhase).mockReturnValue({
-      skipRefresh: false,
-      cleanupGroups: false,
-      authState: "configured",
-      dbPath: "/tmp/demo.db",
-      dbExists: true,
-      scrapeMode: "history",
-      isHistoryMode: true,
-      isDebug: false,
-      isHeaded: false,
+    vi.mocked(runLoadPhase).mockResolvedValue({
+      crawler: {
+        skipRefresh: false,
+        cleanupGroups: false,
+        authState: "configured",
+        dbPath: "/tmp/demo.db",
+        dbExists: true,
+        scrapeMode: "history",
+        isHistoryMode: true,
+        isDebug: false,
+        isHeaded: false,
+      },
+      profile: {
+        id: "primary",
+        name: "Primary",
+        enabled: true,
+        usernameSecretId: "username-id",
+        passwordSecretId: "password-id",
+        totpSecretId: "totp-id",
+      },
     });
     const historyMonths = [{ items: [], month: "2026-06" }];
     vi.mocked(runCashFlowHistoryPhase).mockImplementation(

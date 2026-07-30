@@ -5,6 +5,10 @@ import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { chromium } from "playwright";
 import { createBrowserContext } from "../../src/browser/context.js";
+import {
+  getEnabledMoneyForwardProfile,
+  loadMoneyForwardProfilesConfig,
+} from "../../src/profile-config.js";
 import { SCREENSHOT_DIR, ensureScreenshotDir } from "./global-setup.js";
 
 const NAVIGATION_TIMEOUT = 30000;
@@ -13,8 +17,12 @@ export async function launchLoggedInContext(): Promise<{
   browser: Browser;
   context: BrowserContext;
 }> {
+  const profile = getEnabledMoneyForwardProfile(await loadMoneyForwardProfilesConfig());
   const browser = await chromium.launch({ headless: true });
-  const context = await createBrowserContext(browser, { useAuthState: true });
+  const context = await createBrowserContext(browser, {
+    profileId: profile.id,
+    useAuthState: true,
+  });
   return { browser, context };
 }
 

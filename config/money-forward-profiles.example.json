@@ -1,0 +1,21 @@
+{
+  "$schema": "./money-forward-profiles.schema.json",
+  "profiles": [
+    {
+      "id": "primary",
+      "name": "Primary",
+      "enabled": true,
+      "usernameSecretId": "00000000-0000-4000-8000-000000000001",
+      "passwordSecretId": "00000000-0000-4000-8000-000000000002",
+      "totpSecretId": "00000000-0000-4000-8000-000000000003"
+    },
+    {
+      "id": "secondary",
+      "name": "Secondary",
+      "enabled": false,
+      "usernameSecretId": "00000000-0000-4000-8000-000000000004",
+      "passwordSecretId": "00000000-0000-4000-8000-000000000005",
+      "totpSecretId": "00000000-0000-4000-8000-000000000006"
+    }
+  ]
+}

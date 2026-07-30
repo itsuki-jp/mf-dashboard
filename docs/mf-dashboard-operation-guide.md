@@ -439,6 +439,8 @@ README、`.env.example`、セットアップ文書、テストも更新する。
 - enabledなプロファイルが1つ以上ある
 - `id`にパス区切り、`..`、空白を許可しない
 
+DBが`profile_id`へ対応するPR 5までは、データ衝突を避けるためenabledなプロファイルを最大1件に制限し、2件以上ならMoney Forwardへ接続する前に停止する。DB対応後にこの暫定制限を外して直列profile loopを有効化する。
+
 ### 環境変数
 
 ```dotenv
@@ -1313,7 +1315,7 @@ SECRET_PROVIDER=file
 ### PR 4: Profile Configと認証状態分離
 
 - JSON schema
-- profile loop
+- profile-awareな実行経路（DB対応前はenabled 1件にfail-closed）
 - profile別auth-state
 - DB保存はまだprimaryだけでもよい
 
