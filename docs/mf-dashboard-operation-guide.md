@@ -48,7 +48,7 @@ Windows / Pixel
 1. Money Forward ME無料会員が表示・利用できる金融関連サービスは4件までである。
 2. 5件以上登録していても、無料会員では選択した4件以外の明細は表示できない。
 3. `mf-dashboard`は現在、1組のMoney Forward認証情報と1つのPlaywright認証状態を前提としている。
-4. 現在の実装は`@1password/sdk`へ直接依存している。
+4. このforkの現在の実装はBitwarden Secrets Managerを使用し、`@1password/sdk`と`OP_*`設定は削除済みである。
 5. データはSQLiteへ保存され、日次スナップショットは実行ごとに追加される。
 6. 古いスナップショットを1年で削除する保持期限処理は、確認した範囲では存在しない。
 7. `mf-dashboard`はMIT Licenseであり、fork・改変が可能である。ただし著作権表示とライセンス文を残す。
@@ -327,9 +327,7 @@ export interface MoneyForwardCredentials {
 }
 
 export interface SecretProvider {
-  getMoneyForwardCredentials(
-    profile: MoneyForwardProfileConfig,
-  ): Promise<MoneyForwardCredentials>;
+  getMoneyForwardCredentials(profile: MoneyForwardProfileConfig): Promise<MoneyForwardCredentials>;
 }
 ```
 
@@ -445,7 +443,6 @@ README、`.env.example`、セットアップ文書、テストも更新する。
 
 ```dotenv
 MF_PROFILES_CONFIG_PATH=/app/config/money-forward-profiles.json
-SECRET_PROVIDER=bitwarden
 BWS_ACCESS_TOKEN_FILE=/run/secrets/bws_access_token
 ```
 
@@ -624,8 +621,8 @@ Money Forward由来IDをDBへ保存する箇所で、処理をばらばらに実
 共通関数を作る。
 
 ```ts
-scopeGroupId(profileId, mfGroupId)
-scopeExternalId(profileId, mfId)
+scopeGroupId(profileId, mfGroupId);
+scopeExternalId(profileId, mfId);
 ```
 
 ただし、DB列に`profile_id`を持つ場合、画面表示用の`mf_id`自体を破壊的に書き換えず、内部IDだけを名前空間化する。
@@ -821,7 +818,6 @@ secrets:
 environment:
   BWS_ACCESS_TOKEN_FILE: /run/secrets/bws_access_token
   MF_PROFILES_CONFIG_PATH: /app/config/money-forward-profiles.json
-  SECRET_PROVIDER: bitwarden
 volumes:
   - ./config:/app/config:ro
 ```
@@ -1365,19 +1361,19 @@ SECRET_PROVIDER=file
 
 既存Linuxサーバーを使う場合:
 
-| 項目 | 想定費用 |
-|---|---:|
-| mf-dashboard | 0円 |
-| Docker | 0円 |
-| SQLite | 0円 |
-| Bitwarden Secrets Manager Free | 0円 |
-| Tailscale Personal | 0円 |
-| 独自ドメイン | 不要 |
-| 1Password | 不要 |
-| Cloudflare | 不要 |
-| Google OAuth | 不要 |
-| Money Forward ME | 無料アカウントを使う範囲では0円 |
-| バックアップ先 | 選定次第 |
+| 項目                           |                        想定費用 |
+| ------------------------------ | ------------------------------: |
+| mf-dashboard                   |                             0円 |
+| Docker                         |                             0円 |
+| SQLite                         |                             0円 |
+| Bitwarden Secrets Manager Free |                             0円 |
+| Tailscale Personal             |                             0円 |
+| 独自ドメイン                   |                            不要 |
+| 1Password                      |                            不要 |
+| Cloudflare                     |                            不要 |
+| Google OAuth                   |                            不要 |
+| Money Forward ME               | 無料アカウントを使う範囲では0円 |
+| バックアップ先                 |                        選定次第 |
 
 電気代、Linuxサーバー本体、将来無料枠が変更された場合の費用は別。
 

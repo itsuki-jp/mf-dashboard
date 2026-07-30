@@ -1,18 +1,8 @@
 import { BitwardenSecretProvider } from "./bitwarden-secret-provider.js";
-import { OnePasswordSecretProvider } from "./one-password-secret-provider.js";
 import type { MoneyForwardCredentials, SecretProvider } from "./secret-provider.js";
 
 export function createSecretProvider(environment: NodeJS.ProcessEnv = process.env): SecretProvider {
-  const provider = environment.SECRET_PROVIDER ?? "onepassword";
-
-  switch (provider) {
-    case "bitwarden":
-      return new BitwardenSecretProvider({ environment });
-    case "onepassword":
-      return new OnePasswordSecretProvider();
-    default:
-      throw new Error(`Unsupported SECRET_PROVIDER: ${provider}`);
-  }
+  return new BitwardenSecretProvider({ environment });
 }
 
 export function createCredentialAccess(provider: SecretProvider): {
