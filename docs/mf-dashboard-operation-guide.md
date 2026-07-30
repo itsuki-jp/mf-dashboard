@@ -443,7 +443,6 @@ README、`.env.example`、セットアップ文書、テストも更新する。
 
 ```dotenv
 MF_PROFILES_CONFIG_PATH=/app/config/money-forward-profiles.json
-SECRET_PROVIDER=bitwarden
 BWS_ACCESS_TOKEN_FILE=/run/secrets/bws_access_token
 ```
 
@@ -819,7 +818,6 @@ secrets:
 environment:
   BWS_ACCESS_TOKEN_FILE: /run/secrets/bws_access_token
   MF_PROFILES_CONFIG_PATH: /app/config/money-forward-profiles.json
-  SECRET_PROVIDER: bitwarden
 volumes:
   - ./config:/app/config:ro
 ```
