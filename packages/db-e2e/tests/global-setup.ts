@@ -1,6 +1,6 @@
 import path from "node:path";
 import {
-  getEnabledMoneyForwardProfile,
+  getEnabledMoneyForwardProfiles,
   loadMoneyForwardProfilesConfig,
 } from "@mf-dashboard/crawler/profile-config";
 import { launchProfileSession } from "./profile-session";
@@ -15,7 +15,7 @@ export async function setup() {
   }
 
   console.log("Setting up E2E tests...");
-  const profile = getEnabledMoneyForwardProfile(await loadMoneyForwardProfilesConfig());
+  const [profile] = getEnabledMoneyForwardProfiles(await loadMoneyForwardProfilesConfig());
   const { browser } = await launchProfileSession(profile);
 
   try {

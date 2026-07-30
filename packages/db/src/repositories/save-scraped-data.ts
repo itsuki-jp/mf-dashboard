@@ -25,7 +25,7 @@ import {
   linkAccountsToGroup,
 } from "./groups";
 import { createHolding, saveHoldingValue } from "./holdings";
-import { activateMoneyForwardProfile, type MoneyForwardProfileInput } from "./profiles";
+import { upsertMoneyForwardProfile, type MoneyForwardProfileInput } from "./profiles";
 import { createSnapshot } from "./snapshots";
 import { saveSpendingTargets } from "./spending-targets";
 import { saveAssetHistory } from "./summaries";
@@ -157,7 +157,7 @@ export async function saveScrapedDataBatch(
     : undefined;
 
   return db.transaction(async (transaction) => {
-    await activateMoneyForwardProfile(transaction, profile);
+    await upsertMoneyForwardProfile(transaction, profile);
     if (fullData) await saveScrapedDataAtomically(transaction, profile.id, fullData);
     for (const groupData of data.groupOnlyData) {
       await saveGroupOnlyDataAtomically(transaction, profile.id, groupData);

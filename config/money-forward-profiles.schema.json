@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/mf-dashboard/money-forward-profiles.schema.json",
   "title": "Money Forward Profiles",
-  "$comment": "Runtime validation also requires unique profile IDs and exactly one enabled profile until the database is profile-aware.",
+  "$comment": "Runtime validation also requires unique profile IDs and at least one enabled profile. Enabled profiles run sequentially in declared order.",
   "type": "object",
   "additionalProperties": false,
   "required": ["profiles"],

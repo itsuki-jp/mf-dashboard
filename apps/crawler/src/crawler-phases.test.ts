@@ -182,27 +182,17 @@ describe("runInstitutionCategoryPhase", () => {
 
 describe("loadCrawlerConfig", () => {
   test("DBがある場合はmonth modeを既定にする", () => {
-    const config = loadCrawlerConfig(
-      {},
-      () => true,
-      () => true,
-    );
+    const config = loadCrawlerConfig({}, () => true);
 
     expect(config.scrapeMode).toBe("month");
     expect(config.isHistoryMode).toBe(false);
-    expect(config.authState).toBe("configured");
   });
 
   test("DBがない場合はhistory modeを既定にする", () => {
-    const config = loadCrawlerConfig(
-      {},
-      () => false,
-      () => false,
-    );
+    const config = loadCrawlerConfig({}, () => false);
 
     expect(config.scrapeMode).toBe("history");
     expect(config.isHistoryMode).toBe(true);
-    expect(config.authState).toBe("none");
   });
 
   test("環境変数の指定を優先する", () => {
@@ -215,11 +205,7 @@ describe("loadCrawlerConfig", () => {
       SKIP_REFRESH: "true",
     };
 
-    const config = loadCrawlerConfig(
-      env,
-      (filePath) => filePath === "/tmp/test.db",
-      () => false,
-    );
+    const config = loadCrawlerConfig(env, (filePath) => filePath === "/tmp/test.db");
 
     expect(config.skipRefresh).toBe(true);
     expect(config.cleanupGroups).toBe(true);

@@ -47,7 +47,7 @@ Windows / Pixel
 
 1. Money Forward ME無料会員が表示・利用できる金融関連サービスは4件までである。
 2. 5件以上登録していても、無料会員では選択した4件以外の明細は表示できない。
-3. `mf-dashboard`は現在、1組のMoney Forward認証情報と1つのPlaywright認証状態を前提としている。
+3. このforkの現在の実装は、Money Forward認証情報とPlaywright認証状態をプロファイルごとに分離し、enabledなプロファイルを設定順に直列実行する。
 4. このforkの現在の実装はBitwarden Secrets Managerを使用し、`@1password/sdk`と`OP_*`設定は削除済みである。
 5. データはSQLiteへ保存され、日次スナップショットは実行ごとに追加される。
 6. 古いスナップショットを1年で削除する保持期限処理は、確認した範囲では存在しない。
@@ -62,11 +62,11 @@ Windows / Pixel
 
 ### 3.1 複数Money Forwardアカウントは「プロファイル」として扱う
 
-認証情報だけを複数に増やして、現在のDBへそのまま保存してはいけない。
+認証情報だけを複数に増やして、プロファイル識別子を持たないDBへそのまま保存してはいけない。
 
-現在のDBでは、Money Forward由来のIDがDB全体で一意であることを前提としている箇所がある。また、「グループ選択なし」のMoney ForwardグループIDは`0`で固定されるため、複数アカウントを同じDBへ保存すると衝突する。
+このforkのDBでは、Money Forward由来データを`profile_id`でスコープし、内部グループIDも名前空間化している。「グループ選択なし」のMoney ForwardグループIDが各アカウントで`0`になっても衝突しない。
 
-したがって、すべてのMoney Forward由来データを`profile_id`でスコープする。
+この分離を維持するため、すべてのMoney Forward由来データは必ず`profile_id`で読み書きする。
 
 ### 3.2 1PasswordはBitwarden Secrets Managerへ置き換える
 
@@ -439,7 +439,7 @@ README、`.env.example`、セットアップ文書、テストも更新する。
 - enabledなプロファイルが1つ以上ある
 - `id`にパス区切り、`..`、空白を許可しない
 
-DBが`profile_id`へ対応し、Part Fの直列profile loopと失敗分離が完成するまでは、データ衝突や非決定的な画面表示を避けるためenabledなプロファイルを最大1件に制限する。2件以上ならMoney Forwardへ接続する前に停止し、Part Fの実装・検証と同じPRでこの暫定制限を外す。
+enabledなプロファイルは設定ファイル内の順序で直列実行する。1件が失敗しても後続を試行し、全件の試行後に1件でも失敗があればcrawler全体は失敗として終了する。初回の本番確認ではprimaryだけを有効にし、安定後にsecondaryを有効にする。
 
 ### 環境変数
 
@@ -684,23 +684,23 @@ global crawler lock
 ```text
 primary: success
 secondary: auth_failed
-overall: partial_success
+overall: failed（全profile試行後）
 ```
 
 失敗したプロファイルについては、
 
 - 既存DBデータを削除しない
-- `last_status`と`last_error`だけ更新する
+- 進捗タイムラインへ失敗stepを記録する
 - 認証成功前に古いデータをinactive扱いにしない
 - 他プロファイルのcleanup対象にしない
 
 ### ログ形式
 
-すべてのcrawlerログへprofile IDを付ける。
+進捗タイムラインの各stepと、プロファイルの開始・終了・失敗ログへprofile IDを付ける。
 
 ```text
-[profile=primary] login successful
-[profile=secondary] OTP required
+[primary] 認証
+[secondary] データベース保存
 ```
 
 シークレット値は絶対に出力しない。
@@ -1312,7 +1312,7 @@ SECRET_PROVIDER=file
 ### PR 4: Profile Configと認証状態分離
 
 - JSON schema
-- profile-awareな実行経路（DB対応前はenabled 1件にfail-closed）
+- profile-awareな実行経路（この段階ではenabled 1件にfail-closed）
 - profile別auth-state
 - DB保存はまだprimaryだけでもよい
 
@@ -1327,8 +1327,9 @@ SECRET_PROVIDER=file
 
 ### PR 6: crawler障害分離
 
-- profile別結果
-- partial_success
+- enabled profileの設定順での直列実行
+- profile別進捗ラベルと失敗分離
+- 全profile試行後の全体成否判定
 - profile別cleanup
 - profile別手動更新
 

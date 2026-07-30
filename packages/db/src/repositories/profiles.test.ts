@@ -5,6 +5,7 @@ import { schema } from "../index";
 import { closeTestDb, createTestDb } from "../test-helpers";
 import {
   activateMoneyForwardProfile,
+  synchronizeMoneyForwardProfiles,
   updateMoneyForwardProfileScrapeStatus,
   upsertMoneyForwardProfile,
 } from "./profiles";
@@ -111,6 +112,31 @@ describe("Money Forward profile repository", () => {
       .all();
     expect(profiles.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
       { id: "primary", enabled: false },
+      { id: "secondary", enabled: true },
+    ]);
+  });
+
+  it("設定ファイルに合わせて複数profileのenabled状態を同期する", async () => {
+    await upsertMoneyForwardProfile(db, {
+      id: "removed",
+      name: "Removed",
+      enabled: true,
+    });
+
+    await synchronizeMoneyForwardProfiles(db, [
+      { id: "primary", name: "Primary", enabled: true },
+      { id: "secondary", name: "Secondary", enabled: true },
+      { id: "paused", name: "Paused", enabled: false },
+    ]);
+
+    const profiles = await db
+      .select({ id: schema.moneyForwardProfiles.id, enabled: schema.moneyForwardProfiles.enabled })
+      .from(schema.moneyForwardProfiles)
+      .all();
+    expect(profiles.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+      { id: "paused", enabled: false },
+      { id: "primary", enabled: true },
+      { id: "removed", enabled: false },
       { id: "secondary", enabled: true },
     ]);
   });

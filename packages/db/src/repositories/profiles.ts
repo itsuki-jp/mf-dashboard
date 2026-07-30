@@ -58,6 +58,21 @@ export async function activateMoneyForwardProfile(
   await upsertMoneyForwardProfile(db, { ...profile, enabled: true });
 }
 
+/**
+ * 設定ファイルを正として、DB上のprofile metadataとenabled状態を同期する。
+ * credentialやSecret IDは受け取らず、設定から削除されたprofileのデータも保持する。
+ */
+export async function synchronizeMoneyForwardProfiles(
+  db: DbExecutor,
+  profiles: MoneyForwardProfileInput[],
+): Promise<void> {
+  const timestamp = now();
+  await db.update(schema.moneyForwardProfiles).set({ enabled: false, updatedAt: timestamp }).run();
+  for (const profile of profiles) {
+    await upsertMoneyForwardProfile(db, profile);
+  }
+}
+
 export async function updateMoneyForwardProfileScrapeStatus(
   db: DbExecutor,
   profileId: string,

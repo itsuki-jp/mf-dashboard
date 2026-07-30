@@ -665,7 +665,7 @@ describe("saveScrapedData", () => {
     ]);
   });
 
-  test("primary保存後にsecondaryを保存すると読取対象もsecondaryへ切り替わる", async () => {
+  test("primary保存後にsecondaryを保存しても両profileを読取対象に保つ", async () => {
     await saveScrapedDataBatch(db, PROFILE, {
       fullData: createScrapedData(),
       groupOnlyData: [],
@@ -679,13 +679,17 @@ describe("saveScrapedData", () => {
       { fullData: secondaryData, groupOnlyData: [] },
     );
 
-    await expect(getCurrentGroup(db)).resolves.toMatchObject({
-      id: "secondary:group-a",
-      name: "Secondary Group",
-    });
-    await expect(getAllGroups(db)).resolves.toMatchObject([{ id: "secondary:group-a" }]);
-    await expect(getDefaultGroupId(db)).resolves.toBe("secondary:group-a");
-    await expect(resolveGroupId(db, "primary:group-a")).resolves.toBeNull();
+    await expect(getCurrentGroup(db)).resolves.toEqual(
+      expect.objectContaining({ id: expect.stringMatching(/^(primary|secondary):group-a$/) }),
+    );
+    await expect(getAllGroups(db)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "primary:group-a" }),
+        expect.objectContaining({ id: "secondary:group-a" }),
+      ]),
+    );
+    await expect(getDefaultGroupId(db)).resolves.toMatch(/^(primary|secondary):group-a$/);
+    await expect(resolveGroupId(db, "primary:group-a")).resolves.toBe("primary:group-a");
     await expect(resolveGroupId(db, "secondary:group-a")).resolves.toBe("secondary:group-a");
   });
 

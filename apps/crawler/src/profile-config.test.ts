@@ -2,7 +2,7 @@ import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import {
   assertValidProfileId,
-  getEnabledMoneyForwardProfile,
+  getEnabledMoneyForwardProfiles,
   loadMoneyForwardProfilesConfig,
   parseMoneyForwardProfilesConfig,
   resolveMoneyForwardProfilesConfigPath,
@@ -27,7 +27,7 @@ describe("parseMoneyForwardProfilesConfig", () => {
     });
 
     expect(config.profiles).toHaveLength(2);
-    expect(getEnabledMoneyForwardProfile(config).id).toBe("primary");
+    expect(getEnabledMoneyForwardProfiles(config).map(({ id }) => id)).toEqual(["primary"]);
   });
 
   test.each(["", "Primary", "profile id", "../primary", "primary/x", "primary\\x", "."])(
@@ -64,14 +64,15 @@ describe("parseMoneyForwardProfilesConfig", () => {
     ).toThrow("Money Forward profiles config must enable at least one profile");
   });
 
-  test("rejects multiple enabled profiles until sequential execution is implemented", () => {
-    expect(() =>
-      parseMoneyForwardProfilesConfig({
-        profiles: [profile(), profile({ id: "secondary", name: "Secondary" })],
-      }),
-    ).toThrow(
-      "Only one Money Forward profile can be enabled until sequential profile execution is implemented",
-    );
+  test("accepts multiple enabled profiles in declared order", () => {
+    const config = parseMoneyForwardProfilesConfig({
+      profiles: [profile(), profile({ id: "secondary", name: "Secondary" })],
+    });
+
+    expect(getEnabledMoneyForwardProfiles(config).map(({ id }) => id)).toEqual([
+      "primary",
+      "secondary",
+    ]);
   });
 });
 

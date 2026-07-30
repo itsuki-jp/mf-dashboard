@@ -33,7 +33,7 @@ import { runHooks } from "./hooks/runner.js";
 import { debug, error, info, log, phase, warn } from "./logger.js";
 import { sendFailureNotifications, sendSuccessNotifications } from "./notification.js";
 import {
-  getEnabledMoneyForwardProfile,
+  getEnabledMoneyForwardProfiles,
   loadMoneyForwardProfilesConfig,
   type MoneyForwardProfile,
 } from "./profile-config.js";
@@ -49,7 +49,6 @@ const DEBUG_DIR = path.resolve(import.meta.dirname, "../debug");
 export interface CrawlerConfig {
   skipRefresh: boolean;
   cleanupGroups: boolean;
-  authState: "configured" | "none";
   dbPath: string;
   dbExists: boolean;
   scrapeMode: string;
@@ -68,7 +67,7 @@ export interface CrawlerRuntime {
 
 export interface CrawlerRunConfiguration {
   crawler: CrawlerConfig;
-  profile: MoneyForwardProfile;
+  profiles: MoneyForwardProfile[];
 }
 
 export interface CategoryDecisionRuntime {
@@ -81,13 +80,16 @@ export async function runLoadPhase(): Promise<CrawlerRunConfiguration> {
   loadEnvFile();
 
   const profilesConfig = await loadMoneyForwardProfilesConfig();
-  const profile = getEnabledMoneyForwardProfile(profilesConfig);
-  const config = loadCrawlerConfig(process.env, existsSync, () =>
-    hasAuthState(profile.id, process.env),
-  );
+  const profiles = profilesConfig.profiles;
+  const enabledProfiles = getEnabledMoneyForwardProfiles(profilesConfig);
+  const config = loadCrawlerConfig(process.env, existsSync);
   logCrawlerOptions(config);
-  info(`Active Money Forward profile: ${profile.id}`);
-  return { crawler: config, profile };
+  for (const profile of enabledProfiles) {
+    info(
+      `Enabled Money Forward profile: ${profile.id} (auth state: ${hasAuthState(profile.id, process.env) ? "configured" : "none"})`,
+    );
+  }
+  return { crawler: config, profiles };
 }
 
 function loadEnvFile(envPath = DEFAULT_ENV_PATH): void {
@@ -101,7 +103,6 @@ function loadEnvFile(envPath = DEFAULT_ENV_PATH): void {
 export function loadCrawlerConfig(
   env: NodeJS.ProcessEnv,
   fileExists: (filePath: string) => boolean,
-  authStateExists: () => boolean,
 ): CrawlerConfig {
   const skipRefresh = env.SKIP_REFRESH === "true";
   const cleanupGroups = env.CLEANUP_GROUPS === "true";
@@ -112,7 +113,6 @@ export function loadCrawlerConfig(
   return {
     skipRefresh,
     cleanupGroups,
-    authState: authStateExists() ? "configured" : "none",
     dbPath,
     dbExists,
     scrapeMode,
@@ -129,7 +129,6 @@ function logCrawlerOptions(config: CrawlerConfig): void {
   log(`SCRAPE_MODE:    ${config.scrapeMode} (DB exists: ${config.dbExists})`);
   log(`DEBUG:          ${config.isDebug}`);
   log(`HEADED:         ${config.isHeaded}`);
-  log(`AUTH_STATE:     ${config.authState}`);
 }
 
 export async function runSetupPhase(
