@@ -37,9 +37,7 @@ function getJwks(teamDomain: string): ReturnType<typeof createRemoteJWKSet> {
   return cachedJwks;
 }
 
-export async function hasValidCloudflareAccess(request: Request): Promise<boolean> {
-  if (process.env.DEMO_MODE === "true" || hasLocalDevelopmentAccess(request)) return true;
-
+async function hasValidCloudflareAccess(request: Request): Promise<boolean> {
   const teamDomain = getTeamDomain();
   const audience = process.env.CLOUDFLARE_ACCESS_AUD?.trim();
   const token = request.headers.get("cf-access-jwt-assertion");
@@ -53,5 +51,26 @@ export async function hasValidCloudflareAccess(request: Request): Promise<boolea
     return true;
   } catch {
     return false;
+  }
+}
+
+function hasValidTailscaleAccess(request: Request): boolean {
+  const allowedLogin = process.env.TAILSCALE_ALLOWED_LOGIN?.trim();
+  const requestLogin = request.headers.get("tailscale-user-login");
+  return Boolean(allowedLogin && requestLogin && requestLogin === allowedLogin);
+}
+
+export async function hasValidDashboardAccess(request: Request): Promise<boolean> {
+  if (process.env.DEMO_MODE === "true") return true;
+
+  switch (process.env.AUTH_MODE?.trim() || "cloudflare") {
+    case "cloudflare":
+      return hasValidCloudflareAccess(request);
+    case "tailscale":
+      return hasValidTailscaleAccess(request);
+    case "development":
+      return hasLocalDevelopmentAccess(request);
+    default:
+      return false;
   }
 }

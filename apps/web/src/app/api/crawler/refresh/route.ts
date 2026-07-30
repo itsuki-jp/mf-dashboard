@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { hasValidCloudflareAccess } from "../../../../lib/cloudflare-access";
 import {
   parseCrawlerRefreshStatus,
   unavailableCrawlerRefreshStatus,
 } from "../../../../lib/crawler-refresh-status";
+import { hasValidDashboardAccess } from "../../../../lib/dashboard-access";
 
 export const dynamic = "force-dynamic";
 
@@ -120,7 +120,7 @@ async function proxyCrawlerEvents(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!(await hasValidCloudflareAccess(request))) {
+  if (!(await hasValidDashboardAccess(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -132,7 +132,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!(await hasValidCloudflareAccess(request))) {
+  if (!(await hasValidDashboardAccess(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -3,11 +3,11 @@ import { unavailableCrawlerRefreshStatus } from "../../../../lib/crawler-refresh
 import { GET, POST } from "./route";
 
 const mocks = vi.hoisted(() => ({
-  hasValidCloudflareAccess: vi.fn<(request: Request) => Promise<boolean>>(),
+  hasValidDashboardAccess: vi.fn<(request: Request) => Promise<boolean>>(),
 }));
 
-vi.mock("../../../../lib/cloudflare-access", () => ({
-  hasValidCloudflareAccess: mocks.hasValidCloudflareAccess,
+vi.mock("../../../../lib/dashboard-access", () => ({
+  hasValidDashboardAccess: mocks.hasValidDashboardAccess,
 }));
 
 const originalEnv = { ...process.env };
@@ -59,7 +59,7 @@ describe("/api/crawler/refresh/", () => {
       REFRESH_TOKEN: "refresh-token",
     };
     global.fetch = vi.fn<typeof fetch>();
-    mocks.hasValidCloudflareAccess.mockResolvedValue(true);
+    mocks.hasValidDashboardAccess.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -134,7 +134,7 @@ describe("/api/crawler/refresh/", () => {
   });
 
   it("rejects an unauthenticated crawler run", async () => {
-    mocks.hasValidCloudflareAccess.mockResolvedValue(false);
+    mocks.hasValidDashboardAccess.mockResolvedValue(false);
 
     const res = await POST(sameOriginPostRequest());
 
@@ -182,7 +182,7 @@ describe("/api/crawler/refresh/", () => {
   });
 
   it("rejects an unauthenticated event stream", async () => {
-    mocks.hasValidCloudflareAccess.mockResolvedValue(false);
+    mocks.hasValidDashboardAccess.mockResolvedValue(false);
 
     const res = await GET(sameOriginGetRequest());
 
