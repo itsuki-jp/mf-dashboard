@@ -4,7 +4,7 @@
 
 セットアップは次の順番で進める。
 
-1. Money Forward MEとSecret Providerを準備する
+1. Money Forward MEとBitwarden Secrets Managerを準備する
 2. Cloudflare Zero TrustとGoogle OAuthを準備する
 3. アプリとインフラの設定ファイルを作成する
 4. Terraformを適用する
@@ -13,7 +13,7 @@
 ## 必須要件
 
 - [Money Forward ME](https://moneyforward.com/)
-- [1Password](https://1password.com/jp)（Service Account）または[Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/)
+- [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/)
 - [Cloudflare](https://www.cloudflare.com/ja-jp/)アカウント（Zero Trustを有効化済み）
 - 公開先FQDNのゾーンをCloudflareで管理していること
 - ローカルPCが常時起動できる環境
@@ -30,13 +30,10 @@ git clone https://github.com/hiroppy/mf-dashboard.git
 cd mf-dashboard
 ```
 
-## 1. Money Forward MEとSecret Providerの準備
+## 1. Money Forward MEとBitwarden Secrets Managerの準備
 
 - Money Forward MEでワンタイムパスワードを設定する（[設定方法](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95)）
-- 1Passwordを選ぶ場合はService Accountを発行する（[設定方法](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account)）
-  - Private、Personal、Familyなど、最初から用意されている保管庫へService Accountはアクセスできない。Money Forward MEのアカウントを自分で作成した保管庫へ移し、Service Accountへアクセス権を付与する。
-  - Money Forward MEのログイン項目に、標準の`username`と`password`フィールド、およびワンタイムパスワードのフィールドを用意する。crawlerはこれらのフィールドを1Password SDKから読み取る。
-- Bitwardenを選ぶ場合は、Secrets ManagerのProjectとread-only Machine Accountを作成し、username、password、固定のTOTPセットアップキーを個別のSecretとして登録する。tokenファイルとSecret IDの設定は手順3.1で行う。
+- Bitwarden Secrets ManagerのProjectとread-only Machine Accountを作成し、username、password、固定のTOTPセットアップキーを個別のSecretとして登録する。tokenファイルとSecret IDの設定は手順3.1で行う。
 
 ## 2. Cloudflare Zero Trustの準備
 
@@ -72,7 +69,7 @@ Terraform用のAPI Tokenを発行する。必要な最小権限は次のとお�
 | Zone     | `Zone:Read`                                                  |
 | Zone     | `DNS:Edit`（対象ゾーンを含む）                               |
 
-発行したトークンをパスワードマネージャーなどへ保管し、手順3.2で作成するGit管理対象外の`terraform/terraform.tfvars`にある`cloudflare_api_token`へ設定する。Terraformは`.env`や1Passwordからインフラ設定を読み取らない。
+発行したトークンをパスワードマネージャーなどへ保管し、手順3.2で作成するGit管理対象外の`terraform/terraform.tfvars`にある`cloudflare_api_token`へ設定する。Terraformは`.env`やBitwarden Secrets Managerからインフラ設定を読み取らない。
 
 `terraform.tfvars`とTerraform stateには秘密情報が含まれる。どちらもGitへ追加せず、ローカルディスクの暗号化とファイル権限`600`を維持する。
 
@@ -97,13 +94,15 @@ cp .env.example .env
 openssl rand -hex 32
 ```
 
-この時点では共通設定と、選択したSecret Providerの設定を`.env`へ設定する。1Passwordを使う場合は次のとおり。
+この時点では共通設定とBitwardenのSecret IDを`.env`へ設定する。Machine Account token自体は`.env`へ書かない。
 
 ```dotenv
-OP_SERVICE_ACCOUNT_TOKEN=<1Password Service Accountのトークン>
-OP_VAULT=<保管庫名またはUUID>
-OP_ITEM=<項目名またはUUID>
-OP_TOTP_FIELD=<TOTPフィールド名またはID>
+COMPOSE_PATH_SEPARATOR=:
+COMPOSE_FILE=compose.yml:compose.bitwarden.yml
+BWS_ACCESS_TOKEN_HOST_FILE=./secrets/bws-access-token
+BWS_USERNAME_SECRET_ID=<usernameのSecret ID>
+BWS_PASSWORD_SECRET_ID=<passwordのSecret ID>
+BWS_TOTP_SECRET_ID=<TOTPセットアップキーのSecret ID>
 REFRESH_TOKEN=<openssl rand -hex 32の出力>
 CLOUDFLARE_ACCESS_TEAM_DOMAIN=<team-name>.cloudflareaccess.com
 DASHBOARD_URL=https://dashboard.example.com
@@ -119,10 +118,8 @@ DASHBOARD_URL=https://dashboard.example.com
 | `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Terraform適用前      | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                       |
 | `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraform適用後      | Terraformが作成したAccess ApplicationのAUD                                       |
 | `DASHBOARD_URL`                              | 必須 | Terraform適用前      | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                   |
-| `OP_SERVICE_ACCOUNT_TOKEN`                   | 条件 | Terraform適用前      | 1Password選択時に必須。Service Accountのトークン                                 |
-| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 条件 | Terraform適用前      | 1Password選択時に必須。日本語を含む場合はUUIDを指定                              |
-| `BWS_ACCESS_TOKEN_HOST_FILE`                 | 条件 | Compose起動前        | Bitwarden選択時に必須。Machine Account tokenを保存したowner-read-onlyファイル    |
-| `BWS_*_SECRET_ID`                            | 条件 | Compose起動前        | Bitwarden選択時に必須。username、password、TOTPセットアップキーの各Secret ID     |
+| `BWS_ACCESS_TOKEN_HOST_FILE`                 | 必須 | Compose起動前        | Machine Account tokenを保存したowner-read-onlyファイル                           |
+| `BWS_*_SECRET_ID`                            | 必須 | Compose起動前        | username、password、TOTPセットアップキーの各Secret ID                            |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 財務インサイト、家計AIチャット、LLMカテゴリ推論。利用する機能では3項目すべて必須 |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                        |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                      |
@@ -131,17 +128,9 @@ DASHBOARD_URL=https://dashboard.example.com
 
 Linuxでは`id -u`と`id -g`で値を確認し、`1000:1000`と異なる場合は`.env`の`HOST_UID`と`HOST_GID`へ設定する。web、crawler、cloudflaredが同じUID/GIDで動作し、`./data`とowner-read-onlyのTunnel tokenへ必要な範囲だけアクセスする。
 
-#### 1PasswordのIDを確認する
+#### Bitwarden Secrets Managerのtokenファイルを作成する
 
-1Password SDKは日本語の保管庫名や項目名を扱えないため、日本語を含む場合はUUIDを使う。
-
-- `OP_VAULT`: サイドバーで保管庫を右クリックし、「UUIDをコピー」を選ぶ
-- `OP_ITEM`: アイテム画面右上のメニューから「UUIDをコピー」を選ぶ
-- `OP_TOTP_FIELD`: 同じメニューの「アイテムのJSONをコピー」を選び、`u`の値が`TOTP_`で始まるフィールドIDを取り出す
-
-#### Bitwarden Secrets Managerを使う場合
-
-1Passwordの代わりにBitwarden Secrets Managerを選択できる。Machine Accountには対象プロジェクトの`Can read`だけを付与し、Money Forwardのusername、password、TOTPセットアップキーを別々のSecretとして登録する。
+Machine Accountには対象プロジェクトの`Can read`だけを付与し、Money Forwardのusername、password、TOTPセットアップキーを別々のSecretとして登録する。
 
 Machine AccountのAccess Tokenは`.env`へ書かず、Git管理対象外のファイルへowner-read-onlyで保存する。
 
@@ -152,10 +141,9 @@ umask 077
 chmod 600 secrets/bws-access-token
 ```
 
-`.env`では値そのものではなく、provider、tokenファイル、3つのSecret IDを指定する。
+`.env`では値そのものではなく、tokenファイルと3つのSecret IDを指定する。
 
 ```dotenv
-SECRET_PROVIDER=bitwarden
 COMPOSE_PATH_SEPARATOR=:
 COMPOSE_FILE=compose.yml:compose.bitwarden.yml
 BWS_ACCESS_TOKEN_HOST_FILE=./secrets/bws-access-token
@@ -166,7 +154,7 @@ BWS_TOTP_SECRET_ID=<TOTPセットアップキーのSecret ID>
 
 crawlerはtokenファイルを`/run/secrets/bws_access_token`としてread-onlyでmountし、`bws`子プロセスの`BWS_ACCESS_TOKEN`環境変数だけへ渡す。Access Token、取得したSecret値、`bws`のstdout/stderrはログへ出力しない。
 
-Bitwardenを選択した場合は`COMPOSE_FILE`を`.env`へ設定し、専用overrideを以後のすべてのCompose操作へ自動適用する。これにより後段の`docker compose build`や`docker compose up -d`でもBitwarden設定が外れない。1Password構成では`COMPOSE_FILE`を設定しないため、Bitwarden tokenファイルを要求しない。
+`COMPOSE_FILE`を`.env`へ設定し、Bitwarden専用overrideを以後のすべてのCompose操作へ自動適用する。これにより後段の`docker compose build`や`docker compose up -d`でもtokenファイルとSecret IDがcrawlerへ渡る。
 
 ```sh
 docker compose config --quiet
