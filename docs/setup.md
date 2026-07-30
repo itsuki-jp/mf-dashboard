@@ -136,6 +136,31 @@ Linuxでは`id -u`と`id -g`で値を確認し、`1000:1000`と異なる場合�
 - `OP_ITEM`: アイテム画面右上のメニューから「UUIDをコピー」を選ぶ
 - `OP_TOTP_FIELD`: 同じメニューの「アイテムのJSONをコピー」を選び、`u`の値が`TOTP_`で始まるフィールドIDを取り出す
 
+#### Bitwarden Secrets Managerを使う場合
+
+1Passwordの代わりにBitwarden Secrets Managerを選択できる。Machine Accountには対象プロジェクトの`Can read`だけを付与し、Money Forwardのusername、password、TOTPセットアップキーを別々のSecretとして登録する。
+
+Machine AccountのAccess Tokenは`.env`へ書かず、Git管理対象外のファイルへowner-read-onlyで保存する。
+
+```sh
+install -d -m 700 secrets
+umask 077
+# 値を画面へ表示しない方法でAccess Tokenを書き込む
+chmod 600 secrets/bws-access-token
+```
+
+`.env`では値そのものではなく、provider、tokenファイル、3つのSecret IDを指定する。
+
+```dotenv
+SECRET_PROVIDER=bitwarden
+BWS_ACCESS_TOKEN_HOST_FILE=./secrets/bws-access-token
+BWS_USERNAME_SECRET_ID=<usernameのSecret ID>
+BWS_PASSWORD_SECRET_ID=<passwordのSecret ID>
+BWS_TOTP_SECRET_ID=<TOTPセットアップキーのSecret ID>
+```
+
+crawlerはtokenファイルを`/run/secrets/bws_access_token`としてread-onlyでmountし、`bws`子プロセスの`BWS_ACCESS_TOKEN`環境変数だけへ渡す。Access Token、取得したSecret値、`bws`のstdout/stderrはログへ出力しない。
+
 ### 3.2 インフラ設定
 
 Cloudflare API TokenとGoogle OAuth clientを用意したら、Git管理対象外のインフラ設定ファイルを作成する。
