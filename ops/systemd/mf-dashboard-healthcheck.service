@@ -1,0 +1,13 @@
+[Unit]
+Description=Verify mf-dashboard production health
+After=network-online.target
+OnFailure=mf-dashboard-notify@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/GitHub_Projects/mf-dashboard
+ExecStart=/usr/bin/python3 %h/GitHub_Projects/mf-dashboard/scripts/ops/healthcheck.py
+UMask=0077
+
+[Install]
+WantedBy=default.target

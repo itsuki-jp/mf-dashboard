@@ -21,6 +21,17 @@ jobs:
       - run: pnpm knip
       - run: pnpm typecheck --affected
       - run: pnpm test --affected
+      - run: python3 -m unittest discover -s scripts/ops/tests -p 'test_*.py'
+  ops-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: python3 --version
+      - run: python3 -m unittest discover -s scripts/ops/tests -p 'test_*.py'
   build-demo:
     runs-on: ubuntu-latest
     steps:

@@ -12,7 +12,7 @@ Money Forward MEの家計・資産・投資データを定期的に取得し、W
 
 ### 金融機関の情報を自動更新
 
-crawlerコンテナ内のsupercronicが、登録金融機関の「一括更新」を定期的に実行して完了を監視する。既定の実行時刻は毎日6:30と15:30。
+crawlerコンテナ内のsupercronicが、登録金融機関の「一括更新」を定期的に実行して完了を監視する。既定の実行時刻は毎日6:30。安定運用を確認してから15:30の実行を追加できる。
 
 ### 更新結果をSlackやDiscordへ通知
 
@@ -67,7 +67,7 @@ flowchart TD
     U[利用者] -->|Cloudflare Accessで認証| T[cloudflared]
     T --> W[web]
     W -->|手動更新| C[crawler]
-    S[supercronic<br/>6:30 / 15:30 JST] --> C
+    S[supercronic<br/>6:30 JST] --> C
     O[Bitwarden Secrets Manager<br/>認証情報とTOTPセットアップキー] --> C
     C --> M[Money Forward ME]
     M --> C

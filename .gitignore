@@ -8,6 +8,8 @@ dist/
 *.p12
 *.pfx
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
 
 next-env.d.ts
 .turbo/
@@ -23,6 +25,7 @@ test-groups-moneyforward.db
 test-moneyforward.db*
 data/*
 !data/category-rules.example.json
+backups/
 *.db-shm
 *.db-wal
 secrets/

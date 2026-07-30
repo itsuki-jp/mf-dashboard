@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the encrypted mf-dashboard backup every day
+
+[Timer]
+OnCalendar=*-*-* 10:30:00 Asia/Tokyo
+Persistent=true
+RandomizedDelaySec=5m
+Unit=mf-dashboard-backup.service
+
+[Install]
+WantedBy=timers.target
