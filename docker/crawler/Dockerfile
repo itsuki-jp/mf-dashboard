@@ -9,7 +9,26 @@ ENV PNPM_HOME=/pnpm \
 
 RUN mkdir -p /pnpm \
     && corepack enable \
-    && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates tini \
+    && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates tini unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG BWS_VERSION=2.1.0
+ARG BWS_SHA256_AMD64=ba8233c3a4aee5d43e3c73bbd04d99e9bc5aba13bbbfd06d89b073abe732b860
+ARG BWS_SHA256_ARM64=18253757286e119d450133a87eb463bf8c1ce418ce24c834f4f250d60cba6f9e
+RUN arch="$(dpkg --print-architecture)" \
+    && case "${arch}" in \
+      amd64) bws_arch="x86_64"; bws_sha256="${BWS_SHA256_AMD64}" ;; \
+      arm64) bws_arch="aarch64"; bws_sha256="${BWS_SHA256_ARM64}" ;; \
+      *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac \
+    && bws_archive="bws-${bws_arch}-unknown-linux-gnu-${BWS_VERSION}.zip" \
+    && curl -fsSL "https://github.com/bitwarden/sdk-sm/releases/download/bws-v${BWS_VERSION}/${bws_archive}" \
+      -o /tmp/bws.zip \
+    && echo "${bws_sha256}  /tmp/bws.zip" | sha256sum -c - \
+    && unzip -q /tmp/bws.zip -d /tmp/bws \
+    && install -m 0755 /tmp/bws/bws /usr/local/bin/bws \
+    && rm -rf /tmp/bws /tmp/bws.zip \
+    && apt-get purge -y --auto-remove unzip \
     && rm -rf /var/lib/apt/lists/*
 
 ARG SUPERCRONIC_VERSION=v0.2.30
