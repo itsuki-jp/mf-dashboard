@@ -188,6 +188,8 @@ tailscale version
 sqlite3 --version
 ```
 
+公開鍵ログインを別sessionで実測した後、[SSHの公開鍵認証限定](operations/ssh-hardening.md)に従ってパスワード認証とkeyboard-interactive認証を無効化する。既存sessionを残したまま`sshd -t`、reload、別terminalからの再接続を順に検証し、lockoutを防ぐ。
+
 ---
 
 ## 7. GitHub forkの準備
