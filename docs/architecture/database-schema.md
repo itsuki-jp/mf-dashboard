@@ -3,8 +3,21 @@
 ```mermaid
 erDiagram
     %% マスタ系
-    groups {
+    money_forward_profiles {
         text id PK
+        text name
+        boolean enabled
+        text last_scraped_at
+        text last_status
+        text last_error
+        text created_at
+        text updated_at
+    }
+
+    groups {
+        text id PK "profile_id:mf_group_id"
+        text profile_id FK "INDEX, CASCADE"
+        text mf_group_id
         text name
         boolean is_current
         text last_scraped_at
@@ -14,8 +27,9 @@ erDiagram
 
     group_accounts {
         integer id PK
-        text group_id FK "INDEX, CASCADE"
-        integer account_id FK "INDEX, CASCADE"
+        text profile_id FK "CASCADE"
+        text group_id FK "INDEX, PROFILE PAIR, CASCADE"
+        integer account_id FK "INDEX, PROFILE PAIR, CASCADE"
         text created_at
         text updated_at
     }
@@ -30,7 +44,8 @@ erDiagram
 
     accounts {
         integer id PK
-        text mf_id UK
+        text profile_id FK "INDEX, CASCADE"
+        text mf_id
         text name
         text type
         text institution
@@ -62,7 +77,8 @@ erDiagram
     %% 銘柄・資産マスタ
     holdings {
         integer id PK
-        text mf_id UK
+        text profile_id FK "INDEX, CASCADE"
+        text mf_id
         integer account_id FK "INDEX, CASCADE"
         integer category_id FK "SET NULL"
         text name
@@ -102,7 +118,8 @@ erDiagram
     %% 収支系
     transactions {
         integer id PK
-        text mf_id UK
+        text profile_id FK "INDEX, CASCADE"
+        text mf_id
         text date "INDEX"
         integer account_id FK "INDEX, CASCADE"
         text category
@@ -166,6 +183,11 @@ erDiagram
     }
 
     %% リレーション
+    money_forward_profiles ||--o{ groups : "has many (CASCADE)"
+    money_forward_profiles ||--o{ accounts : "has many (CASCADE)"
+    money_forward_profiles ||--o{ holdings : "has many (CASCADE)"
+    money_forward_profiles ||--o{ transactions : "has many (CASCADE)"
+    money_forward_profiles ||--o{ group_accounts : "has many (CASCADE)"
     groups ||--o{ daily_snapshots : "has many (CASCADE)"
     groups ||--o{ group_accounts : "has many (CASCADE)"
     groups ||--o{ asset_history : "has many (CASCADE)"
@@ -187,13 +209,25 @@ erDiagram
 
 | Table                    | Index                                         | Type   | Columns                         |
 | ------------------------ | --------------------------------------------- | ------ | ------------------------------- |
+| groups                   | groups_profile_mf_group_idx                   | UNIQUE | profile_id, mf_group_id         |
+| groups                   | groups_profile_id_pair_idx                    | UNIQUE | profile_id, id                  |
+| groups                   | groups_profile_id_idx                         | INDEX  | profile_id                      |
 | group_accounts           | group_accounts_group_account_idx              | UNIQUE | group_id, account_id            |
 | group_accounts           | group_accounts_group_id_idx                   | INDEX  | group_id                        |
 | group_accounts           | group_accounts_account_id_idx                 | INDEX  | account_id                      |
 | daily_snapshots          | daily_snapshots_date_idx                      | INDEX  | date                            |
 | holding_values           | holding_values_holding_snapshot_idx           | UNIQUE | holding_id, snapshot_id         |
+| holdings                 | holdings_profile_mf_id_idx                    | UNIQUE | profile_id, mf_id               |
+| holdings                 | holdings_profile_id_idx                       | INDEX  | profile_id                      |
 | holdings                 | holdings_account_id_idx                       | INDEX  | account_id                      |
+| accounts                 | accounts_profile_mf_id_idx                    | UNIQUE | profile_id, mf_id               |
+| accounts                 | accounts_profile_id_pair_idx                  | UNIQUE | profile_id, id                  |
+| accounts                 | accounts_profile_id_idx                       | INDEX  | profile_id                      |
 | accounts                 | accounts_category_id_idx                      | INDEX  | category_id                     |
+| transactions             | transactions_profile_mf_id_idx                | UNIQUE | profile_id, mf_id               |
+| transactions             | transactions_profile_id_idx                   | INDEX  | profile_id                      |
+| transactions             | transactions_profile_date_idx                 | INDEX  | profile_id, date                |
+| transactions             | transactions_profile_account_idx              | INDEX  | profile_id, account_id          |
 | transactions             | transactions_date_idx                         | INDEX  | date                            |
 | transactions             | transactions_account_id_idx                   | INDEX  | account_id                      |
 | asset_history            | asset_history_group_date_idx                  | UNIQUE | group_id, date                  |
@@ -208,6 +242,11 @@ erDiagram
 
 | Parent Table           | Child Table              | Action   |
 | ---------------------- | ------------------------ | -------- |
+| money_forward_profiles | groups                   | CASCADE  |
+| money_forward_profiles | accounts                 | CASCADE  |
+| money_forward_profiles | holdings                 | CASCADE  |
+| money_forward_profiles | transactions             | CASCADE  |
+| money_forward_profiles | group_accounts           | CASCADE  |
 | accounts               | account_statuses         | CASCADE  |
 | accounts               | holdings                 | CASCADE  |
 | accounts               | transactions             | CASCADE  |
@@ -223,3 +262,11 @@ erDiagram
 | asset_history          | asset_history_categories | CASCADE  |
 | institution_categories | accounts                 | SET NULL |
 | asset_categories       | holdings                 | SET NULL |
+
+## Multi-profile migration policy
+
+`0002_aromatic_exodus.sql`は、既存行へ暗黙の`primary` profileを割り当てません。旧schemaの
+`accounts`、`holdings`、`transactions`、`groups`、`group_accounts`のいずれかに行がある場合、migration冒頭の
+`CHECK` guardで変更前に失敗させるfail-closed設計です。multi-profile対応へ移行するときは、
+対象が正しいことを確認したうえで旧DBを退避し、空のDBへfresh migrationを適用してください。
+実データDBをテストや自動migration検証へ流用してはいけません。

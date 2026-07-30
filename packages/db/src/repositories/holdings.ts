@@ -7,6 +7,7 @@ import { now, upsertById } from "../utils";
 // 毎回新規作成（同じ銘柄でも別レコードとして保存）
 export async function createHolding(
   db: DbExecutor,
+  profileId: string,
   accountId: number,
   name: string,
   type: HoldingType,
@@ -19,6 +20,7 @@ export async function createHolding(
   const result = await db
     .insert(schema.holdings)
     .values({
+      profileId,
       mfId: null,
       accountId,
       categoryId: options.categoryId ?? null,

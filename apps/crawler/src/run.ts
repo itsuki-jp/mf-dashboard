@@ -55,6 +55,7 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
     await runCrawlerStep(progress, CRAWLER_STEPS.databaseSave, () =>
       runCashFlowHistoryPhase(
         activeRuntime.db,
+        profile.id,
         activeRuntime.page,
         config,
         activeRuntime.categoryDecision,
@@ -62,6 +63,7 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
         async (historyMonths) => {
           const savedCounts = await runSavePhase(
             activeRuntime.db,
+            profile,
             activeRuntime.page,
             scrapeResult,
             activeRuntime.categoryDecision,
@@ -75,7 +77,7 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
       ),
     );
     await runCrawlerStep(progress, CRAWLER_STEPS.analytics, () =>
-      runAnalyticsPhase(activeRuntime.db, scrapeResult.groupDataList),
+      runAnalyticsPhase(activeRuntime.db, profile.id, scrapeResult.groupDataList),
     );
     const notificationStep = await progress.startStep(CRAWLER_STEPS.notification);
     const notificationFailure = await runNotificationPhase(

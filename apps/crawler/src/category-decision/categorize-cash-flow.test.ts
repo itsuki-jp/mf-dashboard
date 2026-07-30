@@ -106,12 +106,13 @@ describe("categorizeCashFlowMonth", () => {
     await categorizeCashFlowMonth({
       page: {} as Page,
       db,
+      profileId: "primary",
       cashFlow: initialCashFlow,
       config,
       usage: { llmCallsUsed: 0 },
     });
 
-    expect(findExistingTransactionMfIds).toHaveBeenNthCalledWith(2, db, [
+    expect(findExistingTransactionMfIds).toHaveBeenNthCalledWith(2, db, "primary", [
       "latest-existing",
       "latest-new",
     ]);
@@ -136,6 +137,7 @@ describe("categorizeCashFlowMonth", () => {
     const result = await categorizeCashFlowMonth({
       page: {} as Page,
       db: {} as Parameters<typeof categorizeCashFlowMonth>[0]["db"],
+      profileId: "primary",
       cashFlow: initialCashFlow,
       config,
       usage: { llmCallsUsed: 0 },
@@ -164,6 +166,7 @@ describe("categorizeCashFlowMonth", () => {
     const result = await categorizeCashFlowMonth({
       page: {} as Page,
       db: {} as Parameters<typeof categorizeCashFlowMonth>[0]["db"],
+      profileId: "primary",
       cashFlow: initialCashFlow,
       config,
       usage: { llmCallsUsed: 0 },

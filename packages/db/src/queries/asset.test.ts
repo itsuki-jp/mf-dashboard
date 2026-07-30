@@ -5,7 +5,9 @@ import {
   resetTestDb,
   closeTestDb,
   TEST_GROUP_ID,
+  TEST_GLOBAL_GROUP_ID,
   createTestGroup,
+  createTestGlobalGroup,
 } from "../test-helpers";
 import {
   parseDateString,
@@ -36,6 +38,7 @@ afterAll(() => {
 beforeEach(async () => {
   await resetTestDb(db);
   await createTestGroup(db);
+  await createTestGlobalGroup(db);
 });
 
 async function createAssetHistory(data: { date: string; totalAssets: number }): Promise<number> {
@@ -77,6 +80,7 @@ async function createTestAccount(name: string): Promise<number> {
   const account = await db
     .insert(schema.accounts)
     .values({
+      profileId: "primary",
       mfId: `mf_${name}`,
       name,
       type: "bank",
@@ -89,6 +93,7 @@ async function createTestAccount(name: string): Promise<number> {
   await db
     .insert(schema.groupAccounts)
     .values({
+      profileId: "primary",
       groupId: TEST_GROUP_ID,
       accountId: account.id,
       createdAt: now,
@@ -104,7 +109,7 @@ async function createSnapshot(): Promise<number> {
   const snapshot = await db
     .insert(schema.dailySnapshots)
     .values({
-      groupId: TEST_GROUP_ID,
+      groupId: TEST_GLOBAL_GROUP_ID,
       date: "2025-04-15",
       createdAt: now,
       updatedAt: now,
@@ -124,6 +129,7 @@ async function createHolding(data: {
   const holding = await db
     .insert(schema.holdings)
     .values({
+      profileId: "primary",
       accountId: data.accountId,
       name: data.name,
       type: data.type ?? "asset",

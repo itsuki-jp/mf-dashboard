@@ -6,13 +6,13 @@ export async function generateStaticParams() {
   const groups = await getAllGroups();
   const nonCurrent = groups.filter((g) => !g.isCurrent);
   if (nonCurrent.length === 0) return [{ groupId: "_" }];
-  return nonCurrent.map((group) => ({ groupId: group.id }));
+  return nonCurrent.map((group) => ({ groupId: group.mfGroupId }));
 }
 
 export default async function GroupLayout({ children, params }: LayoutProps<"/[groupId]">) {
   const { groupId } = await params;
   const groups = await getAllGroups();
-  const group = groups.find((g) => g.id === groupId);
+  const group = groups.find((g) => g.mfGroupId === groupId);
 
   if (!group) {
     notFound();

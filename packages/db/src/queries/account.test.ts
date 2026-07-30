@@ -46,6 +46,7 @@ async function createTestAccount(data: {
   const account = await db
     .insert(schema.accounts)
     .values({
+      profileId: "primary",
       mfId: data.mfId,
       name: data.name,
       type: data.type ?? "bank",
@@ -60,6 +61,7 @@ async function createTestAccount(data: {
   await db
     .insert(schema.groupAccounts)
     .values({
+      profileId: "primary",
       groupId: TEST_GROUP_ID,
       accountId: account.id,
       createdAt: now,
@@ -182,6 +184,7 @@ describe("buildActiveAccountCondition", () => {
     const unknownAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "unknown",
         name: "Unknown Account",
         type: "bank",
@@ -194,6 +197,7 @@ describe("buildActiveAccountCondition", () => {
     await db
       .insert(schema.groupAccounts)
       .values({
+        profileId: "primary",
         groupId: TEST_GROUP_ID,
         accountId: unknownAccount.id,
         createdAt: now,
@@ -503,6 +507,7 @@ describe("getAccountByMfId", () => {
     await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "mf_outside",
         name: "Outside Account",
         type: "bank",

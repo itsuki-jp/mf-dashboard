@@ -1,9 +1,14 @@
 import { eq } from "drizzle-orm";
 import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import * as schema from "../schema/schema";
-import { createTestDb, resetTestDb, closeTestDb } from "../test-helpers";
+import { closeTestDb, createTestDb, createTestProfile, resetTestDb } from "../test-helpers";
 import type { AccountStatus } from "../types";
-import { upsertAccount, saveAccountStatus, updateAccountCategory } from "./accounts";
+import {
+  buildAccountIdMap,
+  saveAccountStatus,
+  updateAccountCategory,
+  upsertAccount,
+} from "./accounts";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -33,7 +38,7 @@ describe("upsertAccount", () => {
   };
 
   test("新規アカウントを作成して ID を返す", async () => {
-    const id = await upsertAccount(db, account);
+    const id = await upsertAccount(db, "primary", account);
     expect(id).toBeGreaterThan(0);
     const result = await db.select().from(schema.accounts).all();
     expect(result).toHaveLength(1);
@@ -41,8 +46,8 @@ describe("upsertAccount", () => {
   });
 
   test("既存アカウントは更新して同じ ID を返す", async () => {
-    const id1 = await upsertAccount(db, account);
-    const id2 = await upsertAccount(db, { ...account, name: "更新銀行" });
+    const id1 = await upsertAccount(db, "primary", account);
+    const id2 = await upsertAccount(db, "primary", { ...account, name: "更新銀行" });
     expect(id1).toBe(id2);
     const result = await db.select().from(schema.accounts).all();
     expect(result).toHaveLength(1);
@@ -52,7 +57,7 @@ describe("upsertAccount", () => {
 
 describe("saveAccountStatus", () => {
   test("アカウントステータスを保存できる", async () => {
-    const accountId = await upsertAccount(db, {
+    const accountId = await upsertAccount(db, "primary", {
       mfId: "acc1",
       name: "テスト銀行",
       type: "自動連携",
@@ -79,7 +84,7 @@ describe("saveAccountStatus", () => {
 
 describe("updateAccountCategory", () => {
   test("アカウントにカテゴリーを設定できる", async () => {
-    await upsertAccount(db, {
+    await upsertAccount(db, "primary", {
       mfId: "acc1",
       name: "SBI銀行",
       type: "自動連携",
@@ -89,7 +94,7 @@ describe("updateAccountCategory", () => {
       totalAssets: 1000000,
     });
 
-    await updateAccountCategory(db, "acc1", "銀行");
+    await updateAccountCategory(db, "primary", "acc1", "銀行");
 
     const account = await db
       .select()
@@ -112,7 +117,7 @@ describe("updateAccountCategory", () => {
   });
 
   test("同じカテゴリー名で複数のアカウントを更新できる", async () => {
-    await upsertAccount(db, {
+    await upsertAccount(db, "primary", {
       mfId: "acc1",
       name: "SBI銀行",
       type: "自動連携",
@@ -122,7 +127,7 @@ describe("updateAccountCategory", () => {
       totalAssets: 1000000,
     });
 
-    await upsertAccount(db, {
+    await upsertAccount(db, "primary", {
       mfId: "acc2",
       name: "三井住友銀行",
       type: "自動連携",
@@ -132,8 +137,8 @@ describe("updateAccountCategory", () => {
       totalAssets: 500000,
     });
 
-    await updateAccountCategory(db, "acc1", "銀行");
-    await updateAccountCategory(db, "acc2", "銀行");
+    await updateAccountCategory(db, "primary", "acc1", "銀行");
+    await updateAccountCategory(db, "primary", "acc2", "銀行");
 
     const accounts = await db.select().from(schema.accounts).all();
     expect(accounts).toHaveLength(2);
@@ -147,7 +152,7 @@ describe("updateAccountCategory", () => {
   });
 
   test("異なるカテゴリーで複数のアカウントを更新できる", async () => {
-    await upsertAccount(db, {
+    await upsertAccount(db, "primary", {
       mfId: "acc1",
       name: "SBI銀行",
       type: "自動連携",
@@ -157,7 +162,7 @@ describe("updateAccountCategory", () => {
       totalAssets: 1000000,
     });
 
-    await upsertAccount(db, {
+    await upsertAccount(db, "primary", {
       mfId: "acc2",
       name: "SBI証券",
       type: "自動連携",
@@ -167,8 +172,8 @@ describe("updateAccountCategory", () => {
       totalAssets: 5000000,
     });
 
-    await updateAccountCategory(db, "acc1", "銀行");
-    await updateAccountCategory(db, "acc2", "証券");
+    await updateAccountCategory(db, "primary", "acc1", "銀行");
+    await updateAccountCategory(db, "primary", "acc2", "証券");
 
     const accounts = await db.select().from(schema.accounts).all();
     expect(accounts).toHaveLength(2);
@@ -179,5 +184,38 @@ describe("updateAccountCategory", () => {
     const categories = await db.select().from(schema.institutionCategories).all();
     expect(categories).toHaveLength(2);
     expect(categories.map((c) => c.name)).toEqual(expect.arrayContaining(["銀行", "証券"]));
+  });
+});
+
+describe("profile分離", () => {
+  const sharedAccount: AccountStatus = {
+    mfId: "shared-account",
+    name: "Account A",
+    type: "自動連携",
+    status: "ok",
+    lastUpdated: "2026-01-01",
+    url: "/accounts/show/shared-account",
+    totalAssets: 1000,
+  };
+
+  test("同じmfIdを共存させ、mapとcategory更新をprofile内へ限定する", async () => {
+    await createTestProfile(db, "secondary");
+    const primaryId = await upsertAccount(db, "primary", sharedAccount);
+    const secondaryId = await upsertAccount(db, "secondary", {
+      ...sharedAccount,
+      name: "Account B",
+    });
+
+    expect(primaryId).not.toBe(secondaryId);
+    const primaryMap = await buildAccountIdMap(db, "primary");
+    const secondaryMap = await buildAccountIdMap(db, "secondary");
+    expect(primaryMap.get("shared-account")).toBe(primaryId);
+    expect(secondaryMap.get("shared-account")).toBe(secondaryId);
+
+    await updateAccountCategory(db, "secondary", "shared-account", "証券");
+
+    const accounts = await db.select().from(schema.accounts).all();
+    expect(accounts.find(({ profileId }) => profileId === "primary")?.categoryId).toBeNull();
+    expect(accounts.find(({ profileId }) => profileId === "secondary")?.categoryId).not.toBeNull();
   });
 });

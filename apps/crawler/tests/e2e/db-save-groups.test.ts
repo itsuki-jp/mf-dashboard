@@ -26,6 +26,7 @@ import {
 const TEST_DB_DIR = path.resolve(process.cwd(), "tests/e2e");
 const TEST_DB_PATH = path.join(TEST_DB_DIR, "test-groups-moneyforward.db");
 const PROGRESS_STATE_PATH = path.join(os.tmpdir(), `db-save-groups-${randomUUID()}.json`);
+const PROFILE = { id: "primary", name: "Primary", enabled: true } as const;
 
 let browser: Browser;
 let context: BrowserContext;
@@ -59,14 +60,14 @@ beforeAll(async () => {
       const noGroupData = result.groupDataList.find((gd) => isNoGroup(gd.group.id));
       if (noGroupData) {
         const scrapedData = buildScrapedData(result.globalData, noGroupData);
-        await saveScrapedData(db, scrapedData, institutionCategories);
+        await saveScrapedData(db, PROFILE, scrapedData, institutionCategories);
       }
 
       // 各グループはグループ固有データのみ保存
       for (const groupData of result.groupDataList) {
         if (isNoGroup(groupData.group.id)) continue;
         const scrapedData = buildGroupOnlyScrapedData(groupData);
-        await saveGroupOnlyData(db, scrapedData);
+        await saveGroupOnlyData(db, PROFILE, scrapedData);
       }
 
       return result;

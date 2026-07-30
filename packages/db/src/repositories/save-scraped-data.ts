@@ -1,5 +1,5 @@
 import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type {
@@ -25,6 +25,7 @@ import {
   linkAccountsToGroup,
 } from "./groups";
 import { createHolding, saveHoldingValue } from "./holdings";
+import { activateMoneyForwardProfile, type MoneyForwardProfileInput } from "./profiles";
 import { createSnapshot } from "./snapshots";
 import { saveSpendingTargets } from "./spending-targets";
 import { saveAssetHistory } from "./summaries";
@@ -122,10 +123,11 @@ function resolveHoldingAccountId(
  */
 export async function saveScrapedData(
   db: Db,
+  profile: MoneyForwardProfileInput,
   data: ScrapedData,
   institutionCategories: ReadonlyMap<string, string> = new Map(),
 ): Promise<void> {
-  await saveScrapedDataBatch(db, {
+  await saveScrapedDataBatch(db, profile, {
     fullData: data,
     groupOnlyData: [],
     institutionCategories,
@@ -134,6 +136,7 @@ export async function saveScrapedData(
 
 export async function saveScrapedDataBatch(
   db: Db,
+  profile: MoneyForwardProfileInput,
   data: {
     cleanupGroupIds?: string[];
     fullData?: ScrapedData;
@@ -154,50 +157,58 @@ export async function saveScrapedDataBatch(
     : undefined;
 
   return db.transaction(async (transaction) => {
-    if (fullData) await saveScrapedDataAtomically(transaction, fullData);
+    await activateMoneyForwardProfile(transaction, profile);
+    if (fullData) await saveScrapedDataAtomically(transaction, profile.id, fullData);
     for (const groupData of data.groupOnlyData) {
-      await saveGroupOnlyDataAtomically(transaction, groupData);
+      await saveGroupOnlyDataAtomically(transaction, profile.id, groupData);
     }
     for (const [mfId, category] of data.institutionCategories ?? []) {
-      await updateAccountCategory(transaction, mfId, category);
+      await updateAccountCategory(transaction, profile.id, mfId, category);
     }
 
     const savedCounts: number[] = [];
     if (data.historyMonths?.length) {
-      const accountIdMap = await buildAccountIdMap(transaction);
+      const accountIdMap = await buildAccountIdMap(transaction, profile.id);
       for (const { items, month } of data.historyMonths) {
         savedCounts.push(
-          await replaceTransactionsForMonth(transaction, month, items, accountIdMap),
+          await replaceTransactionsForMonth(transaction, profile.id, month, items, accountIdMap),
         );
       }
     }
-    if (data.cleanupGroupIds) await deleteGroupsNotIn(transaction, data.cleanupGroupIds);
+    if (data.cleanupGroupIds) {
+      await deleteGroupsNotIn(transaction, profile.id, data.cleanupGroupIds);
+    }
     return savedCounts;
   });
 }
 
-async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Promise<void> {
+async function saveScrapedDataAtomically(
+  db: DbExecutor,
+  profileId: string,
+  data: ScrapedData,
+): Promise<void> {
   const today = getJstTodayIsoDate();
 
   log("Saving scraped data to database...");
 
   // 1. Save group
+  const groupId = data.currentGroup
+    ? await upsertGroup(db, profileId, data.currentGroup)
+    : undefined;
   if (data.currentGroup) {
-    await upsertGroup(db, data.currentGroup);
     log(`  - Group: ${data.currentGroup.name}`);
   }
 
-  const groupId = data.currentGroup?.id;
   if (groupId === undefined || groupId === null) {
     throw new Error("No group available. Cannot save data.");
   }
 
   // 2. Save accounts (バルク処理)
-  await upsertAccounts(db, data.registeredAccounts.accounts);
+  await upsertAccounts(db, profileId, data.registeredAccounts.accounts);
   log(`  - Accounts: ${data.registeredAccounts.accounts.length}`);
 
   // 3. Build accountIdMap from DB
-  const accountIdMap = await buildAccountIdMap(db);
+  const accountIdMap = await buildAccountIdMap(db, profileId);
   log(`  - accountIdMap: ${accountIdMap.size} entries`);
 
   const currentAccountIdByName = new Map<string, number | null>();
@@ -220,7 +231,7 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
   const accountIds = data.registeredAccounts.accounts
     .map((account) => accountIdMap.get(account.mfId))
     .filter((id): id is number => id !== undefined);
-  await linkAccountsToGroup(db, groupId, accountIds);
+  await linkAccountsToGroup(db, profileId, groupId, accountIds);
   log(`  - Group account links: ${accountIds.length}`);
 
   // 5. Save account statuses (バルク処理)
@@ -246,13 +257,14 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
   let unknownAccount = await db
     .select()
     .from(schema.accounts)
-    .where(eq(schema.accounts.mfId, "unknown"))
+    .where(and(eq(schema.accounts.profileId, profileId), eq(schema.accounts.mfId, "unknown")))
     .get();
 
   if (!unknownAccount) {
     unknownAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId,
         mfId: "unknown",
         name: "-",
         type: "手動",
@@ -273,7 +285,7 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
       unknownAccountId,
     );
     const categoryId = await getOrCreateCategory(db, item.type);
-    const holdingId = await createHolding(db, accountId, item.name, "asset", {
+    const holdingId = await createHolding(db, profileId, accountId, item.name, "asset", {
       categoryId,
       code: item.code,
     });
@@ -298,7 +310,7 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
       liability,
       unknownAccountId,
     );
-    const holdingId = await createHolding(db, accountId, liability.name, "liability", {
+    const holdingId = await createHolding(db, profileId, accountId, liability.name, "liability", {
       liabilityCategory: liability.category,
     });
     await saveHoldingValue(db, holdingId, snapshotId, { amount: liability.balance });
@@ -308,7 +320,7 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
   // 10. Save transactions
   let savedCount = 0;
   for (const item of data.cashFlow.items) {
-    await saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, profileId, item, accountIdMap);
     if (item.mfId && !item.mfId.startsWith("unknown")) {
       savedCount++;
     }
@@ -339,33 +351,42 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
  * - assetHistory
  * - spendingTargets
  */
-export async function saveGroupOnlyData(db: Db, data: ScrapedData): Promise<void> {
-  await saveScrapedDataBatch(db, { groupOnlyData: [data] });
+export async function saveGroupOnlyData(
+  db: Db,
+  profile: MoneyForwardProfileInput,
+  data: ScrapedData,
+): Promise<void> {
+  await saveScrapedDataBatch(db, profile, { groupOnlyData: [data] });
 }
 
-async function saveGroupOnlyDataAtomically(db: DbExecutor, data: ScrapedData): Promise<void> {
+async function saveGroupOnlyDataAtomically(
+  db: DbExecutor,
+  profileId: string,
+  data: ScrapedData,
+): Promise<void> {
   log("Saving group-only data to database...");
 
   // 1. Save group
+  const groupId = data.currentGroup
+    ? await upsertGroup(db, profileId, data.currentGroup)
+    : undefined;
   if (data.currentGroup) {
-    await upsertGroup(db, data.currentGroup);
     log(`  - Group: ${data.currentGroup.name}`);
   }
 
-  const groupId = data.currentGroup?.id;
   if (groupId === undefined || groupId === null) {
     throw new Error("No group available. Cannot save data.");
   }
 
   // 2. Build accountIdMap from DB (全アカウント)
-  const accountIdMap = await buildAccountIdMap(db);
+  const accountIdMap = await buildAccountIdMap(db, profileId);
 
   // 3. Group-account links (バルク処理)
   await clearGroupAccountLinks(db, groupId);
   const accountIds = data.registeredAccounts.accounts
     .map((account) => accountIdMap.get(account.mfId))
     .filter((id): id is number => id !== undefined);
-  await linkAccountsToGroup(db, groupId, accountIds);
+  await linkAccountsToGroup(db, profileId, groupId, accountIds);
   log(`  - Group account links: ${accountIds.length}`);
 
   // 4. Save asset history

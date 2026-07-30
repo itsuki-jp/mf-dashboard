@@ -4,9 +4,16 @@
 // - Public institution, product, service, and merchant labels are allowed only as non-personal demo labels.
 // - Synthetic IDs must use the demo/demo_group prefix and must not resemble real account identifiers.
 
-export const GROUP_ID = "0"; // グループ選択なし（全アカウント）
-export const GROUP_ID_INVESTMENT = "demo_group_001"; // 投資グループ
-export const GROUP_ID_LIVING = "demo_group_002"; // 生活グループ
+import { scopeGroupId } from "../profile-scope";
+
+export const DEMO_PROFILE_ID = "demo";
+export const RAW_GROUP_ID = "0";
+export const RAW_GROUP_ID_INVESTMENT = "demo_group_001";
+export const RAW_GROUP_ID_LIVING = "demo_group_002";
+
+export const GROUP_ID = scopeGroupId(DEMO_PROFILE_ID, RAW_GROUP_ID);
+export const GROUP_ID_INVESTMENT = scopeGroupId(DEMO_PROFILE_ID, RAW_GROUP_ID_INVESTMENT);
+export const GROUP_ID_LIVING = scopeGroupId(DEMO_PROFILE_ID, RAW_GROUP_ID_LIVING);
 
 export const ALL_GROUP_IDS = [GROUP_ID, GROUP_ID_INVESTMENT, GROUP_ID_LIVING] as const;
 

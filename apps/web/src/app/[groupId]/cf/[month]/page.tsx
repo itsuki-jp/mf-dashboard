@@ -13,7 +13,7 @@ export async function generateStaticParams() {
   for (const group of groups) {
     const months = await getAvailableMonths(group.id);
     for (const { month } of months) {
-      params.push({ groupId: group.id, month });
+      params.push({ groupId: group.mfGroupId, month });
     }
   }
 

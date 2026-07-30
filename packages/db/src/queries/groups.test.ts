@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
-import { createTestDb, resetTestDb, closeTestDb } from "../test-helpers";
+import { activateMoneyForwardProfile } from "../repositories/profiles";
+import { createTestDb, resetTestDb, closeTestDb, createTestProfile } from "../test-helpers";
 import { getCurrentGroup, getAllGroups } from "./groups";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
@@ -24,7 +25,9 @@ describe("getCurrentGroup", () => {
     await db
       .insert(schema.groups)
       .values({
-        id: "group_001",
+        profileId: "primary",
+        mfGroupId: "group_001",
+        id: "primary:group_001",
         name: "Current Group",
         isCurrent: true,
         createdAt: now,
@@ -34,7 +37,7 @@ describe("getCurrentGroup", () => {
 
     const result = await getCurrentGroup(db);
 
-    expect(result?.id).toBe("group_001");
+    expect(result?.id).toBe("primary:group_001");
     expect(result?.name).toBe("Current Group");
   });
 
@@ -52,7 +55,9 @@ describe("getAllGroups", () => {
       .insert(schema.groups)
       .values([
         {
-          id: "g1",
+          profileId: "primary",
+          mfGroupId: "g1",
+          id: "primary:g1",
           name: "Group 1",
           isCurrent: false,
           lastScrapedAt: yesterday,
@@ -60,7 +65,9 @@ describe("getAllGroups", () => {
           updatedAt: now,
         },
         {
-          id: "g2",
+          profileId: "primary",
+          mfGroupId: "g2",
+          id: "primary:g2",
           name: "Group 2",
           isCurrent: true,
           lastScrapedAt: yesterday,
@@ -68,7 +75,9 @@ describe("getAllGroups", () => {
           updatedAt: now,
         },
         {
-          id: "g3",
+          profileId: "primary",
+          mfGroupId: "g3",
+          id: "primary:g3",
           name: "Group 3",
           isCurrent: false,
           lastScrapedAt: now,
@@ -80,8 +89,42 @@ describe("getAllGroups", () => {
 
     const result = await getAllGroups(db);
 
-    expect(result[0].id).toBe("g2"); // isCurrent=true が最初
-    expect(result[1].id).toBe("g3"); // 次に lastScrapedAt が新しい順
-    expect(result[2].id).toBe("g1");
+    expect(result[0].id).toBe("primary:g2"); // isCurrent=true が最初
+    expect(result[1].id).toBe("primary:g3"); // 次に lastScrapedAt が新しい順
+    expect(result[2].id).toBe("primary:g1");
+  });
+
+  it("active profile切替後は新しいprofileのグループだけを返す", async () => {
+    const now = new Date().toISOString();
+    await createTestProfile(db, "secondary");
+    await db.insert(schema.groups).values([
+      {
+        profileId: "primary",
+        mfGroupId: "shared",
+        id: "primary:shared",
+        name: "Primary Group",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        profileId: "secondary",
+        mfGroupId: "shared",
+        id: "secondary:shared",
+        name: "Secondary Group",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    await activateMoneyForwardProfile(db, {
+      id: "secondary",
+      name: "Secondary",
+      enabled: true,
+    });
+
+    await expect(getCurrentGroup(db)).resolves.toMatchObject({ id: "secondary:shared" });
+    await expect(getAllGroups(db)).resolves.toMatchObject([{ id: "secondary:shared" }]);
   });
 });

@@ -15,6 +15,13 @@
       "when": 1770337292584,
       "tag": "0001_rapid_genesis",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785420350862,
+      "tag": "0002_aromatic_exodus",
+      "breakpoints": true
     }
   ]
 }

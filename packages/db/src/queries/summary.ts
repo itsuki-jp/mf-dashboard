@@ -1,5 +1,5 @@
 import { getJstDateParts, getJstYearMonthKey } from "@mf-dashboard/date-utils";
-import { eq, and, like, sql, inArray, or, notInArray } from "drizzle-orm";
+import { eq, and, like, sql, inArray, or, notInArray, ne } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
 import { generateMonthRange } from "../shared/utils";
@@ -80,7 +80,7 @@ export function buildRegularIncomeSum() {
   end)`.as("regular_income");
 }
 
-const GROUP_NONE_ID = "0";
+const GROUP_NONE_MF_ID = "0";
 
 /**
  * 振替の収入/支出分類を判定
@@ -121,22 +121,30 @@ export async function hasCommonGroup(
     await db
       .select({ groupId: schema.groupAccounts.groupId })
       .from(schema.groupAccounts)
-      .where(eq(schema.groupAccounts.accountId, accountId1))
+      .innerJoin(schema.groups, eq(schema.groups.id, schema.groupAccounts.groupId))
+      .where(
+        and(
+          eq(schema.groupAccounts.accountId, accountId1),
+          ne(schema.groups.mfGroupId, GROUP_NONE_MF_ID),
+        ),
+      )
       .all()
-  )
-    .map((g) => g.groupId)
-    .filter((id) => id !== GROUP_NONE_ID);
+  ).map((g) => g.groupId);
 
   const groups2Set = new Set(
     (
       await db
         .select({ groupId: schema.groupAccounts.groupId })
         .from(schema.groupAccounts)
-        .where(eq(schema.groupAccounts.accountId, accountId2))
+        .innerJoin(schema.groups, eq(schema.groups.id, schema.groupAccounts.groupId))
+        .where(
+          and(
+            eq(schema.groupAccounts.accountId, accountId2),
+            ne(schema.groups.mfGroupId, GROUP_NONE_MF_ID),
+          ),
+        )
         .all()
-    )
-      .map((g) => g.groupId)
-      .filter((id) => id !== GROUP_NONE_ID),
+    ).map((g) => g.groupId),
   );
 
   return groups1.some((g) => groups2Set.has(g));

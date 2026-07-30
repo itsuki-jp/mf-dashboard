@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { scopeGroupId } from "../profile-scope";
 import * as schema from "../schema/schema";
 import { dateStr, type Now, type SeedDb } from "./shared";
 
@@ -9,6 +10,7 @@ interface SeedInsightsInput {
   yearEnd: number;
   monthEnd: number;
   fixedDay: number;
+  profileId: string;
 }
 
 export async function seedInsights({
@@ -17,6 +19,7 @@ export async function seedInsights({
   yearEnd,
   monthEnd,
   fixedDay,
+  profileId,
 }: SeedInsightsInput): Promise<number> {
   const insightsPath = join(import.meta.dirname, "..", "fixtures", "demo-insights.json");
   if (!existsSync(insightsPath)) return 0;
@@ -28,7 +31,7 @@ export async function seedInsights({
     await db
       .insert(schema.analyticsReports)
       .values({
-        groupId,
+        groupId: scopeGroupId(profileId, groupId),
         date: dateStr(yearEnd, monthEnd, fixedDay),
         summary: data.summary,
         savingsInsight: data.savingsInsight,

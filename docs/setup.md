@@ -150,7 +150,7 @@ BWS_ACCESS_TOKEN_HOST_FILE=./secrets/bws-access-token
 MF_PROFILES_CONFIG_PATH=./config/money-forward-profiles.json
 ```
 
-`config/money-forward-profiles.json`へprofile ID、表示名、enabled状態、3つのSecret IDを設定する。実ファイルはGitとDocker imageから除外される。DBがprofile対応になるまではデータ衝突を防ぐため、enabledは1件だけにする。2件以上がenabledの場合、crawlerはMoney Forwardへ接続する前に停止する。
+`config/money-forward-profiles.json`へprofile ID、表示名、enabled状態、3つのSecret IDを設定する。実ファイルはGitとDocker imageから除外される。crawlerの直列profile loopと失敗分離が完成するまではenabledを1件だけにする。2件以上がenabledの場合、crawlerはMoney Forwardへ接続する前に停止する。
 
 profile別のPlaywright認証状態はLinux上のcrawler専用volumeだけへ保存する。credential相当のセッション情報を含むため、GitHub Actions cacheやリポジトリへ保存しない。
 

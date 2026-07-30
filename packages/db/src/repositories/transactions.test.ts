@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import * as schema from "../schema/schema";
-import { createTestDb, resetTestDb, closeTestDb } from "../test-helpers";
+import { closeTestDb, createTestDb, createTestProfile, resetTestDb } from "../test-helpers";
 import type { CashFlowItem } from "../types";
 import {
   saveTransaction,
@@ -45,7 +45,7 @@ describe("saveTransaction", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     };
-    await saveTransaction(db, item);
+    await saveTransaction(db, "primary", item);
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].amount).toBe(1000);
@@ -56,6 +56,7 @@ describe("saveTransaction", () => {
     const accountResult = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "acc1",
         name: "三井住友銀行 (テスト)",
         type: "自動連携",
@@ -82,7 +83,7 @@ describe("saveTransaction", () => {
       isExcludedFromCalculation: false,
       accountName: "三井住友銀行 (テスト)",
     };
-    await saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, "primary", item, accountIdMap);
 
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
@@ -94,6 +95,7 @@ describe("saveTransaction", () => {
     const accountResult = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "acc1",
         name: "三井住友銀行 (テスト)",
         type: "自動連携",
@@ -120,7 +122,7 @@ describe("saveTransaction", () => {
       isExcludedFromCalculation: false,
       accountName: "三井住友銀行", // 部分一致
     };
-    await saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, "primary", item, accountIdMap);
 
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
@@ -132,6 +134,7 @@ describe("saveTransaction", () => {
     const sourceResult = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "acc1",
         name: "ゆうちょ銀行（貯蓄用）",
         type: "自動連携",
@@ -146,6 +149,7 @@ describe("saveTransaction", () => {
     const targetResult = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "acc2",
         name: "三井住友銀行 (テスト)",
         type: "自動連携",
@@ -173,7 +177,7 @@ describe("saveTransaction", () => {
       accountName: "三井住友銀行 (テスト)", // トランザクションの所有者
       transferTarget: "ゆうちょ銀行（貯蓄用）", // 振替相手先
     };
-    await saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, "primary", item, accountIdMap);
 
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
@@ -186,6 +190,7 @@ describe("saveTransaction", () => {
     const sourceResult = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "acc1",
         name: "ゆうちょ銀行（貯蓄用）",
         type: "自動連携",
@@ -200,6 +205,7 @@ describe("saveTransaction", () => {
     const targetResult = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "acc2",
         name: "三井住友銀行",
         type: "自動連携",
@@ -227,7 +233,7 @@ describe("saveTransaction", () => {
       accountName: "三井住友銀行",
       transferTarget: "ゆうちょ銀行", // 部分一致
     };
-    await saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, "primary", item, accountIdMap);
 
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
@@ -238,6 +244,7 @@ describe("saveTransaction", () => {
     const accountResult = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "acc1",
         name: "三井住友銀行",
         type: "自動連携",
@@ -264,7 +271,7 @@ describe("saveTransaction", () => {
       accountName: "三井住友銀行",
       transferTarget: "存在しない銀行",
     };
-    await saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, "primary", item, accountIdMap);
 
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
@@ -285,11 +292,77 @@ describe("saveTransaction", () => {
       isExcludedFromCalculation: false,
       accountName: "三井住友銀行",
     };
-    await saveTransaction(db, item);
+    await saveTransaction(db, "primary", item);
 
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].accountId).toBeNull();
+  });
+
+  test("異なるprofileの送金元accountは保存できない", async () => {
+    await createTestProfile(db, "secondary");
+    const secondaryAccount = await db
+      .insert(schema.accounts)
+      .values({
+        profileId: "secondary",
+        mfId: "account-001",
+        name: "Account A",
+        type: "bank",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+    const item: CashFlowItem = {
+      mfId: "transaction-001",
+      date: "2025-04-15",
+      category: "Test Category",
+      subCategory: null,
+      description: "Transaction A",
+      amount: 1000,
+      type: "expense",
+      isTransfer: false,
+      isExcludedFromCalculation: false,
+      accountName: "Account A",
+    };
+
+    await expect(
+      saveTransaction(db, "primary", item, new Map([["Account A", secondaryAccount.id]])),
+    ).rejects.toThrow(/Failed query: insert into "transactions"/);
+    await expect(db.select().from(schema.transactions).all()).resolves.toEqual([]);
+  });
+
+  test("異なるprofileの振替先accountは保存前に拒否する", async () => {
+    await createTestProfile(db, "secondary");
+    const secondaryAccount = await db
+      .insert(schema.accounts)
+      .values({
+        profileId: "secondary",
+        mfId: "account-001",
+        name: "Account A",
+        type: "bank",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+    const item: CashFlowItem = {
+      mfId: "transaction-001",
+      date: "2025-04-15",
+      category: null,
+      subCategory: null,
+      description: "Transfer A",
+      amount: 1000,
+      type: "transfer",
+      isTransfer: true,
+      isExcludedFromCalculation: true,
+      transferTarget: "Account A",
+    };
+
+    await expect(
+      saveTransaction(db, "primary", item, new Map([["Account A", secondaryAccount.id]])),
+    ).rejects.toThrow("Transfer target account does not belong to the Money Forward profile");
+    await expect(db.select().from(schema.transactions).all()).resolves.toEqual([]);
   });
 
   test("unknown mfId はスキップされる", async () => {
@@ -304,7 +377,7 @@ describe("saveTransaction", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     };
-    await saveTransaction(db, item);
+    await saveTransaction(db, "primary", item);
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(0);
   });
@@ -321,8 +394,8 @@ describe("saveTransaction", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     };
-    await saveTransaction(db, item);
-    await saveTransaction(db, { ...item, amount: 2000 });
+    await saveTransaction(db, "primary", item);
+    await saveTransaction(db, "primary", { ...item, amount: 2000 });
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].amount).toBe(2000);
@@ -340,9 +413,9 @@ describe("saveTransaction", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     };
-    await saveTransaction(db, item);
+    await saveTransaction(db, "primary", item);
 
-    await saveTransaction(db, {
+    await saveTransaction(db, "primary", {
       ...item,
       category: "日用品",
       subCategory: "ドラッグストア",
@@ -364,7 +437,7 @@ describe("saveTransaction", () => {
 
 describe("findExistingTransactionMfIds", () => {
   test("指定したmfIdのうちDBに存在するものだけをSetで返す", async () => {
-    await saveTransaction(db, {
+    await saveTransaction(db, "primary", {
       mfId: "existing-1",
       date: "2026-06-01",
       category: "食費",
@@ -375,7 +448,7 @@ describe("findExistingTransactionMfIds", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     });
-    await saveTransaction(db, {
+    await saveTransaction(db, "primary", {
       mfId: "existing-2",
       date: "2026-06-02",
       category: "趣味・娯楽",
@@ -387,20 +460,24 @@ describe("findExistingTransactionMfIds", () => {
       isExcludedFromCalculation: false,
     });
 
-    const result = await findExistingTransactionMfIds(db, ["existing-1", "missing", "existing-2"]);
+    const result = await findExistingTransactionMfIds(db, "primary", [
+      "existing-1",
+      "missing",
+      "existing-2",
+    ]);
 
     expect([...result].sort()).toEqual(["existing-1", "existing-2"]);
   });
 
   test("空配列の場合はDBを読まず空Setを返す", async () => {
-    const result = await findExistingTransactionMfIds(db, []);
+    const result = await findExistingTransactionMfIds(db, "primary", []);
 
     expect(result).toEqual(new Set());
   });
 
   test("BATCH_SIZEを超える入力でも全バッチの既存mfIdを返す", async () => {
     for (const mfId of ["existing-1", "existing-2", "existing-599"]) {
-      await saveTransaction(db, {
+      await saveTransaction(db, "primary", {
         mfId,
         date: "2026-06-03",
         category: "食費",
@@ -418,7 +495,7 @@ describe("findExistingTransactionMfIds", () => {
     mfIds[499] = "existing-2";
     mfIds[599] = "existing-599";
 
-    const result = await findExistingTransactionMfIds(db, mfIds);
+    const result = await findExistingTransactionMfIds(db, "primary", mfIds);
 
     expect([...result].sort()).toEqual(["existing-1", "existing-2", "existing-599"]);
   });
@@ -426,11 +503,11 @@ describe("findExistingTransactionMfIds", () => {
 
 describe("hasTransactionsForMonth / deleteTransactionsForMonth", () => {
   test("月にデータがなければ false", async () => {
-    expect(await hasTransactionsForMonth(db, "2025-04")).toBe(false);
+    expect(await hasTransactionsForMonth(db, "primary", "2025-04")).toBe(false);
   });
 
   test("月にデータがあれば true", async () => {
-    await saveTransaction(db, {
+    await saveTransaction(db, "primary", {
       mfId: "tx1",
       date: "2025-04-15",
       category: "食費",
@@ -441,11 +518,11 @@ describe("hasTransactionsForMonth / deleteTransactionsForMonth", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     });
-    expect(await hasTransactionsForMonth(db, "2025-04")).toBe(true);
+    expect(await hasTransactionsForMonth(db, "primary", "2025-04")).toBe(true);
   });
 
   test("月のデータを削除できる", async () => {
-    await saveTransaction(db, {
+    await saveTransaction(db, "primary", {
       mfId: "tx1",
       date: "2025-04-15",
       category: "食費",
@@ -456,9 +533,9 @@ describe("hasTransactionsForMonth / deleteTransactionsForMonth", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     });
-    const count = await deleteTransactionsForMonth(db, "2025-04");
+    const count = await deleteTransactionsForMonth(db, "primary", "2025-04");
     expect(count).toBe(1);
-    expect(await hasTransactionsForMonth(db, "2025-04")).toBe(false);
+    expect(await hasTransactionsForMonth(db, "primary", "2025-04")).toBe(false);
   });
 });
 
@@ -489,12 +566,12 @@ describe("saveTransactionsForMonth", () => {
   ];
 
   test("月のトランザクションを一括保存できる", async () => {
-    const savedCount = await saveTransactionsForMonth(db, "2025-04", items);
+    const savedCount = await saveTransactionsForMonth(db, "primary", "2025-04", items);
     expect(savedCount).toBe(2);
   });
 
   test("既存データは削除して上書きされる", async () => {
-    await saveTransactionsForMonth(db, "2025-04", items);
+    await saveTransactionsForMonth(db, "primary", "2025-04", items);
 
     // 異なるデータで上書き
     const newItems: CashFlowItem[] = [
@@ -510,7 +587,7 @@ describe("saveTransactionsForMonth", () => {
         isExcludedFromCalculation: false,
       },
     ];
-    const savedCount = await saveTransactionsForMonth(db, "2025-04", newItems);
+    const savedCount = await saveTransactionsForMonth(db, "primary", "2025-04", newItems);
 
     expect(savedCount).toBe(1);
     const result = await db.select().from(schema.transactions).all();
@@ -519,7 +596,7 @@ describe("saveTransactionsForMonth", () => {
   });
 
   test("MM/DD形式の日付は保存対象月の年で保存される", async () => {
-    const savedCount = await saveTransactionsForMonth(db, "2025-12", [
+    const savedCount = await saveTransactionsForMonth(db, "primary", "2025-12", [
       {
         mfId: "tx-history-1",
         date: "12/31",
@@ -537,5 +614,68 @@ describe("saveTransactionsForMonth", () => {
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].date).toBe("2025-12-31");
+  });
+
+  test("一括保存でも異なるprofileの振替先accountを拒否する", async () => {
+    await createTestProfile(db, "secondary");
+    const secondaryAccount = await db
+      .insert(schema.accounts)
+      .values({
+        profileId: "secondary",
+        mfId: "account-001",
+        name: "Account A",
+        type: "bank",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+    const item: CashFlowItem = {
+      mfId: "transaction-001",
+      date: "2025-04-15",
+      category: null,
+      subCategory: null,
+      description: "Transfer A",
+      amount: 1000,
+      type: "transfer",
+      isTransfer: true,
+      isExcludedFromCalculation: true,
+      transferTarget: "Account A",
+    };
+
+    await expect(
+      saveTransactionsForMonth(
+        db,
+        "primary",
+        "2025-04",
+        [item],
+        new Map([["Account A", secondaryAccount.id]]),
+      ),
+    ).rejects.toThrow("Transfer target account does not belong to the Money Forward profile");
+    await expect(db.select().from(schema.transactions).all()).resolves.toEqual([]);
+  });
+
+  test("同じmfIdを共存させ、secondaryの月置換がprimaryへ影響しない", async () => {
+    await createTestProfile(db, "secondary");
+    const sharedItem: CashFlowItem = {
+      mfId: "shared-transaction",
+      date: "2025-04-10",
+      category: "食費",
+      subCategory: null,
+      description: "Transaction A",
+      amount: 100,
+      type: "expense",
+      isTransfer: false,
+      isExcludedFromCalculation: false,
+    };
+    await saveTransaction(db, "primary", sharedItem);
+    await saveTransaction(db, "secondary", { ...sharedItem, amount: 200 });
+
+    await saveTransactionsForMonth(db, "secondary", "2025-04", [{ ...sharedItem, amount: 300 }]);
+
+    const transactions = await db.select().from(schema.transactions).all();
+    expect(transactions).toHaveLength(2);
+    expect(transactions.find(({ profileId }) => profileId === "primary")?.amount).toBe(100);
+    expect(transactions.find(({ profileId }) => profileId === "secondary")?.amount).toBe(300);
   });
 });

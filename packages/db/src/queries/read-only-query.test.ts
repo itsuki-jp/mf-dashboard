@@ -27,14 +27,18 @@ beforeEach(async () => {
   await resetTestDb(db);
   const now = new Date().toISOString();
   await db.insert(schema.groups).values({
-    id: "0",
+    profileId: "primary",
+    mfGroupId: "0",
+    id: "primary:0",
     name: "No Group",
     isCurrent: false,
     createdAt: now,
     updatedAt: now,
   });
   await db.insert(schema.groups).values({
-    id: "group-a",
+    profileId: "primary",
+    mfGroupId: "group-a",
+    id: "primary:group-a",
     name: "Group A",
     isCurrent: true,
     createdAt: now,
@@ -43,6 +47,7 @@ beforeEach(async () => {
   const account = await db
     .insert(schema.accounts)
     .values({
+      profileId: "primary",
       mfId: "account-a",
       name: "Card A",
       type: "card",
@@ -52,12 +57,14 @@ beforeEach(async () => {
     .returning()
     .get();
   await db.insert(schema.groupAccounts).values({
-    groupId: "group-a",
+    profileId: "primary",
+    groupId: "primary:group-a",
     accountId: account.id,
     createdAt: now,
     updatedAt: now,
   });
   await db.insert(schema.transactions).values({
+    profileId: "primary",
     mfId: "transaction-a",
     date: "2026-07-10",
     accountId: account.id,
@@ -71,7 +78,9 @@ beforeEach(async () => {
   });
 
   await db.insert(schema.groups).values({
-    id: "group-b",
+    profileId: "primary",
+    mfGroupId: "group-b",
+    id: "primary:group-b",
     name: "Group B",
     isCurrent: false,
     createdAt: now,
@@ -80,6 +89,7 @@ beforeEach(async () => {
   const otherAccount = await db
     .insert(schema.accounts)
     .values({
+      profileId: "primary",
       mfId: "account-b",
       name: "Card B",
       type: "card",
@@ -89,12 +99,14 @@ beforeEach(async () => {
     .returning()
     .get();
   await db.insert(schema.groupAccounts).values({
-    groupId: "group-b",
+    profileId: "primary",
+    groupId: "primary:group-b",
     accountId: otherAccount.id,
     createdAt: now,
     updatedAt: now,
   });
   await db.insert(schema.transactions).values({
+    profileId: "primary",
     mfId: "transaction-b",
     date: "2026-07-11",
     accountId: otherAccount.id,
@@ -117,7 +129,7 @@ describe("executeReadOnlyQuery", () => {
        JOIN group_accounts ga ON ga.account_id = t.account_id
        WHERE ga.group_id = :groupId AND t.category = '食費'
       ORDER BY t.amount DESC`,
-      "group-a",
+      "primary:group-a",
       databasePath,
     );
 
@@ -134,13 +146,97 @@ describe("executeReadOnlyQuery", () => {
       executeReadOnlyQuery(
         db,
         "SELECT description, amount FROM transactions ORDER BY amount DESC",
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({
       rows: [{ description: "店舗 A", amount: 3_000 }],
       rowCount: 1,
       truncated: false,
+    });
+  });
+
+  it("同じraw IDを持つ別profileのデータをsandboxへ混入させない", async () => {
+    const now = new Date().toISOString();
+    await db.insert(schema.moneyForwardProfiles).values({
+      id: "secondary",
+      name: "Secondary",
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.groups).values([
+      {
+        id: "secondary:0",
+        profileId: "secondary",
+        mfGroupId: "0",
+        name: "All Accounts",
+        isCurrent: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "secondary:group-a",
+        profileId: "secondary",
+        mfGroupId: "group-a",
+        name: "Group A",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    const secondaryAccount = await db
+      .insert(schema.accounts)
+      .values({
+        profileId: "secondary",
+        mfId: "account-a",
+        name: "Card A",
+        type: "card",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    await db.insert(schema.groupAccounts).values({
+      profileId: "secondary",
+      groupId: "secondary:group-a",
+      accountId: secondaryAccount.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.transactions).values({
+      profileId: "secondary",
+      mfId: "transaction-a",
+      date: "2026-07-10",
+      accountId: secondaryAccount.id,
+      description: "Secondary transaction",
+      amount: 9_999,
+      type: "expense",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "SELECT profile_id, mf_id, description FROM transactions",
+        "primary:group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      rows: [{ profile_id: "primary", mf_id: null, description: "店舗 A" }],
+      rowCount: 1,
+    });
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "SELECT profile_id, mf_id, name FROM accounts",
+        "primary:group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      rows: [{ profile_id: "primary", mf_id: null, name: "Card A" }],
+      rowCount: 1,
     });
   });
 
@@ -155,6 +251,7 @@ describe("executeReadOnlyQuery", () => {
     if (!selectedAccount || !externalAccount) throw new Error("Test accounts were not created.");
 
     await db.insert(schema.transactions).values({
+      profileId: "primary",
       mfId: "malformed-external-expense",
       date: "2026-07-12",
       accountId: externalAccount.id,
@@ -170,7 +267,7 @@ describe("executeReadOnlyQuery", () => {
       executeReadOnlyQuery(
         db,
         "SELECT description FROM transactions WHERE mf_id IS NULL AND description = 'External expense'",
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({ rows: [], rowCount: 0 });
@@ -241,7 +338,9 @@ describe("executeReadOnlyQuery", () => {
     'WITH value AS (SELECT 1 AS amount) SELECT amount FROM "value"',
     'WITH "value" AS (SELECT 1 AS amount) SELECT amount FROM "value"',
   ])("allowlist内のquoted tableまたはCTEを実行できる: %s", async (sql) => {
-    await expect(executeReadOnlyQuery(db, sql, "group-a", databasePath)).resolves.toMatchObject({
+    await expect(
+      executeReadOnlyQuery(db, sql, "primary:group-a", databasePath),
+    ).resolves.toMatchObject({
       rowCount: 1,
     });
   });
@@ -281,7 +380,7 @@ describe("executeReadOnlyQuery", () => {
 
   it("main schemaを指定したgroup viewの迂回を拒否する", async () => {
     await expect(
-      executeReadOnlyQuery(db, "SELECT * FROM main.transactions", "group-a", databasePath),
+      executeReadOnlyQuery(db, "SELECT * FROM main.transactions", "primary:group-a", databasePath),
     ).rejects.toThrow("データベースschemaを直接指定するSQLは実行できません。");
   });
 
@@ -290,7 +389,7 @@ describe("executeReadOnlyQuery", () => {
       executeReadOnlyQuery(
         db,
         "SELECT 1 FROM (transactions AS window, sqlite_master)",
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).rejects.toThrow("許可されていないテーブル sqlite_master は参照できません。");
@@ -301,7 +400,7 @@ describe("executeReadOnlyQuery", () => {
       executeReadOnlyQuery(
         db,
         "SELECT source.description FROM transactions AS source",
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({
@@ -317,6 +416,7 @@ describe("executeReadOnlyQuery", () => {
     if (!selectedAccount || !externalAccount) throw new Error("Test accounts were not created.");
 
     await db.insert(schema.transactions).values({
+      profileId: "primary",
       mfId: "boundary-transfer",
       date: "2026-07-12",
       accountId: externalAccount.id,
@@ -336,7 +436,7 @@ describe("executeReadOnlyQuery", () => {
         `SELECT mf_id, account_id, transfer_target, transfer_target_account_id, is_internal_transfer
          FROM transactions
          WHERE description = 'Boundary transfer'`,
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({
@@ -360,7 +460,9 @@ describe("executeReadOnlyQuery", () => {
     if (!selectedAccount || !externalAccount) throw new Error("Test accounts were not created.");
 
     await db.insert(schema.groups).values({
-      id: "group-c",
+      profileId: "primary",
+      mfGroupId: "group-c",
+      id: "primary:group-c",
       name: "Group C",
       isCurrent: false,
       createdAt: now,
@@ -368,19 +470,22 @@ describe("executeReadOnlyQuery", () => {
     });
     await db.insert(schema.groupAccounts).values([
       {
-        groupId: "group-c",
+        profileId: "primary",
+        groupId: "primary:group-c",
         accountId: selectedAccount.id,
         createdAt: now,
         updatedAt: now,
       },
       {
-        groupId: "group-c",
+        profileId: "primary",
+        groupId: "primary:group-c",
         accountId: externalAccount.id,
         createdAt: now,
         updatedAt: now,
       },
     ]);
     await db.insert(schema.transactions).values({
+      profileId: "primary",
       mfId: "internal-boundary-transfer",
       date: "2026-07-12",
       accountId: externalAccount.id,
@@ -400,7 +505,7 @@ describe("executeReadOnlyQuery", () => {
         `SELECT is_internal_transfer
          FROM transactions
          WHERE description = 'Internal boundary transfer'`,
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({
@@ -418,6 +523,7 @@ describe("executeReadOnlyQuery", () => {
     const anotherExternalAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "account-c",
         name: "Card C",
         type: "card",
@@ -428,6 +534,7 @@ describe("executeReadOnlyQuery", () => {
       .get();
     await db.insert(schema.transactions).values([
       {
+        profileId: "primary",
         mfId: "outbound-transfer-a",
         date: "2026-07-12",
         accountId: selectedAccount.id,
@@ -441,6 +548,7 @@ describe("executeReadOnlyQuery", () => {
         updatedAt: now,
       },
       {
+        profileId: "primary",
         mfId: "outbound-transfer-b",
         date: "2026-07-12",
         accountId: selectedAccount.id,
@@ -454,6 +562,7 @@ describe("executeReadOnlyQuery", () => {
         updatedAt: now,
       },
       {
+        profileId: "primary",
         mfId: "outbound-transfer-a-duplicate",
         date: "2026-07-12",
         accountId: selectedAccount.id,
@@ -467,6 +576,7 @@ describe("executeReadOnlyQuery", () => {
         updatedAt: now,
       },
       {
+        profileId: "primary",
         mfId: "inbound-transfer-a",
         date: "2026-07-12",
         accountId: externalAccount.id,
@@ -480,6 +590,7 @@ describe("executeReadOnlyQuery", () => {
         updatedAt: now,
       },
       {
+        profileId: "primary",
         mfId: "inbound-transfer-b",
         date: "2026-07-12",
         accountId: anotherExternalAccount.id,
@@ -493,6 +604,7 @@ describe("executeReadOnlyQuery", () => {
         updatedAt: now,
       },
       {
+        profileId: "primary",
         mfId: "inbound-transfer-a-duplicate",
         date: "2026-07-12",
         accountId: externalAccount.id,
@@ -513,7 +625,7 @@ describe("executeReadOnlyQuery", () => {
        FROM transactions
        WHERE description LIKE 'Outbound transfer%'
        ORDER BY description`,
-      "group-a",
+      "primary:group-a",
       databasePath,
     );
     const keys = result.rows.map(({ transfer_counterparty_key }) => transfer_counterparty_key);
@@ -532,7 +644,7 @@ describe("executeReadOnlyQuery", () => {
        FROM transactions
        WHERE description LIKE 'Inbound transfer%'
        ORDER BY description`,
-      "group-a",
+      "primary:group-a",
       databasePath,
     );
     const inboundKeys = inboundResult.rows.map(
@@ -555,6 +667,7 @@ describe("executeReadOnlyQuery", () => {
 
     await db.insert(schema.transactions).values([
       {
+        profileId: "primary",
         mfId: "unresolved-outbound-transfer",
         date: "2026-07-12",
         accountId: selectedAccount.id,
@@ -566,6 +679,7 @@ describe("executeReadOnlyQuery", () => {
         updatedAt: now,
       },
       {
+        profileId: "primary",
         mfId: "unresolved-inbound-transfer",
         date: "2026-07-12",
         accountId: null,
@@ -586,7 +700,7 @@ describe("executeReadOnlyQuery", () => {
         `SELECT description
          FROM transactions
          WHERE description LIKE 'Unresolved % transfer'`,
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({ rows: [], rowCount: 0 });
@@ -597,6 +711,7 @@ describe("executeReadOnlyQuery", () => {
     const fallbackAccount = await db
       .insert(schema.accounts)
       .values({
+        profileId: "primary",
         mfId: "unknown",
         name: "-",
         type: "manual",
@@ -608,6 +723,7 @@ describe("executeReadOnlyQuery", () => {
     const holding = await db
       .insert(schema.holdings)
       .values({
+        profileId: "primary",
         mfId: "unmatched-holding",
         accountId: fallbackAccount.id,
         name: "Unmatched Asset",
@@ -620,7 +736,7 @@ describe("executeReadOnlyQuery", () => {
     const snapshot = await db
       .insert(schema.dailySnapshots)
       .values({
-        groupId: "0",
+        groupId: "primary:0",
         date: "2026-07-12",
         createdAt: now,
         updatedAt: now,
@@ -643,7 +759,7 @@ describe("executeReadOnlyQuery", () => {
          JOIN holding_values hv ON hv.holding_id = h.id
          JOIN group_accounts ga ON ga.account_id = h.account_id
          WHERE ga.group_id = :groupId`,
-        "0",
+        "primary:0",
         databasePath,
       ),
     ).resolves.toMatchObject({
@@ -655,7 +771,7 @@ describe("executeReadOnlyQuery", () => {
   it("refreshとのversionを保証できないanalytics reportをsandboxへ公開しない", async () => {
     const now = new Date().toISOString();
     await db.insert(schema.analyticsReports).values({
-      groupId: "group-a",
+      groupId: "primary:group-a",
       date: "2026-07-24",
       summary: "古い分析",
       createdAt: now,
@@ -663,7 +779,12 @@ describe("executeReadOnlyQuery", () => {
     });
 
     await expect(
-      executeReadOnlyQuery(db, "SELECT summary FROM analytics_reports", "group-a", databasePath),
+      executeReadOnlyQuery(
+        db,
+        "SELECT summary FROM analytics_reports",
+        "primary:group-a",
+        databasePath,
+      ),
     ).resolves.toMatchObject({ rows: [], rowCount: 0 });
   });
 
@@ -677,6 +798,7 @@ describe("executeReadOnlyQuery", () => {
     const oldHolding = await db
       .insert(schema.holdings)
       .values({
+        profileId: "primary",
         mfId: "holding-a-old",
         accountId: account.id,
         name: "Asset A",
@@ -689,6 +811,7 @@ describe("executeReadOnlyQuery", () => {
     const currentHolding = await db
       .insert(schema.holdings)
       .values({
+        profileId: "primary",
         mfId: "holding-a-current",
         accountId: account.id,
         name: "Asset A",
@@ -701,6 +824,7 @@ describe("executeReadOnlyQuery", () => {
     const incompleteHolding = await db
       .insert(schema.holdings)
       .values({
+        profileId: "primary",
         mfId: "holding-a-incomplete",
         accountId: account.id,
         name: "Asset A",
@@ -713,7 +837,7 @@ describe("executeReadOnlyQuery", () => {
     const selectedSnapshot = await db
       .insert(schema.dailySnapshots)
       .values({
-        groupId: "0",
+        groupId: "primary:0",
         date: "2026-07-11",
         createdAt: now,
         updatedAt: now,
@@ -723,7 +847,7 @@ describe("executeReadOnlyQuery", () => {
     const externalSnapshot = await db
       .insert(schema.dailySnapshots)
       .values({
-        groupId: "group-b",
+        groupId: "primary:group-b",
         date: "2026-07-12",
         createdAt: now,
         updatedAt: now,
@@ -733,7 +857,7 @@ describe("executeReadOnlyQuery", () => {
     const incompleteSnapshot = await db
       .insert(schema.dailySnapshots)
       .values({
-        groupId: "0",
+        groupId: "primary:0",
         date: "2026-07-13",
         refreshCompleted: false,
         createdAt: now,
@@ -772,11 +896,11 @@ describe("executeReadOnlyQuery", () => {
          FROM daily_snapshots ds
          JOIN holding_values hv ON hv.snapshot_id = ds.id
          ORDER BY hv.amount`,
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({
-      rows: [{ group_id: "group-a", amount: 10_000 }],
+      rows: [{ group_id: "primary:group-a", amount: 10_000 }],
       rowCount: 1,
     });
   });
@@ -791,6 +915,7 @@ describe("executeReadOnlyQuery", () => {
     const oldHolding = await db
       .insert(schema.holdings)
       .values({
+        profileId: "primary",
         mfId: "holding-a-old",
         accountId: account.id,
         name: "Asset A",
@@ -803,7 +928,7 @@ describe("executeReadOnlyQuery", () => {
     const oldSnapshot = await db
       .insert(schema.dailySnapshots)
       .values({
-        groupId: "0",
+        groupId: "primary:0",
         date: "2026-07-11",
         createdAt: now,
         updatedAt: now,
@@ -811,7 +936,7 @@ describe("executeReadOnlyQuery", () => {
       .returning()
       .get();
     await db.insert(schema.dailySnapshots).values({
-      groupId: "0",
+      groupId: "primary:0",
       date: "2026-07-12",
       createdAt: now,
       updatedAt: now,
@@ -830,7 +955,7 @@ describe("executeReadOnlyQuery", () => {
         `SELECT
            (SELECT COUNT(*) FROM holdings) AS holding_count,
            (SELECT date FROM daily_snapshots) AS snapshot_date`,
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({
@@ -841,7 +966,7 @@ describe("executeReadOnlyQuery", () => {
 
   it("schema外のtableを拒否する", async () => {
     await expect(
-      executeReadOnlyQuery(db, "SELECT name FROM sqlite_master", "group-a", databasePath),
+      executeReadOnlyQuery(db, "SELECT name FROM sqlite_master", "primary:group-a", databasePath),
     ).rejects.toThrow("許可されていないテーブル sqlite_master は参照できません。");
   });
 
@@ -852,7 +977,7 @@ describe("executeReadOnlyQuery", () => {
     "SELECT transactions.description, sqlite_schema.name FROM transactions, sqlite_schema",
     'SELECT transactions.description, sqlite_schema.name FROM transactions, "sqlite_schema"',
   ])("allowlistを迂回するtable参照を拒否する: %s", async (sql) => {
-    await expect(executeReadOnlyQuery(db, sql, "group-a", databasePath)).rejects.toThrow(
+    await expect(executeReadOnlyQuery(db, sql, "primary:group-a", databasePath)).rejects.toThrow(
       /(?:テーブル名はschemaに記載された形式|許可されていないテーブル sqlite_schema)/,
     );
   });
@@ -868,7 +993,7 @@ describe("executeReadOnlyQuery", () => {
       executeReadOnlyQuery(
         db,
         "SELECT description || description AS value FROM transactions",
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toEqual({
@@ -884,7 +1009,7 @@ describe("executeReadOnlyQuery", () => {
       executeReadOnlyQuery(
         db,
         "SELECT 1 AS duplicate_name, 2 AS duplicate_name",
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({
@@ -898,7 +1023,7 @@ describe("executeReadOnlyQuery", () => {
       executeReadOnlyQuery(
         db,
         "SELECT datetime('2026-07-24 15:30:00', 'localtime') AS local_datetime",
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({
@@ -915,6 +1040,7 @@ describe("executeReadOnlyQuery", () => {
 
     await db.insert(schema.transactions).values(
       Array.from({ length: 249 }, (_, index) => ({
+        profileId: "primary",
         mfId: `timeout-transaction-${index}`,
         date: "2026-07-12",
         accountId: account.id,
@@ -934,7 +1060,7 @@ describe("executeReadOnlyQuery", () => {
          JOIN transactions b ON 1 = 1
          JOIN transactions c ON 1 = 1
          JOIN transactions d ON 1 = 1`,
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).rejects.toThrow("SQLの実行時間が上限を超えました。");
@@ -949,6 +1075,7 @@ describe("executeReadOnlyQuery", () => {
 
     await db.insert(schema.transactions).values(
       Array.from({ length: 249 }, (_, index) => ({
+        profileId: "primary",
         mfId: `abort-transaction-${index}`,
         date: "2026-07-12",
         accountId: account.id,
@@ -969,7 +1096,7 @@ describe("executeReadOnlyQuery", () => {
        JOIN transactions b ON 1 = 1
        JOIN transactions c ON 1 = 1
        JOIN transactions d ON 1 = 1`,
-      "group-a",
+      "primary:group-a",
       databasePath,
       abortController.signal,
     );
@@ -993,7 +1120,7 @@ describe("executeReadOnlyQuery", () => {
         db,
         `WITH ${commonTableExpressions.join(",")}
          SELECT value FROM value_27`,
-        "group-a",
+        "primary:group-a",
         databasePath,
       ),
     ).rejects.toThrow(/memory|上限/);

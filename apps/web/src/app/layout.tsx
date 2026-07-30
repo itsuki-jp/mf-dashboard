@@ -39,12 +39,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   } else {
     const groups = await getAllGroups();
     const currentGroup = await getCurrentGroup();
-    const defaultGroupId = currentGroup?.id ?? groups[0]?.id ?? null;
+    const defaultGroupId = currentGroup?.mfGroupId ?? groups[0]?.mfGroupId ?? null;
     const dashboard = (
       <SidebarProvider>
         <Header
           groups={groups.map((group) => ({
-            id: group.id,
+            id: group.mfGroupId,
             name: group.name,
             isCurrent: group.isCurrent ?? false,
             lastScrapedAt: group.lastScrapedAt,

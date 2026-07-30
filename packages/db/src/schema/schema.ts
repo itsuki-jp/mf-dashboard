@@ -1,34 +1,75 @@
 import { relations } from "drizzle-orm";
-import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
+import {
+  foreignKey,
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 // ============================================================================
 // マスタ系
 // ============================================================================
 
-export const groups = sqliteTable("groups", {
+export const moneyForwardProfiles = sqliteTable("money_forward_profiles", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  isCurrent: integer("is_current", { mode: "boolean" }).default(false),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   lastScrapedAt: text("last_scraped_at"),
+  lastStatus: text("last_status"),
+  lastError: text("last_error"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const groups = sqliteTable(
+  "groups",
+  {
+    // Money Forwardのraw IDはmfGroupIdに保持し、idはprofileId:mfGroupIdで名前空間化する。
+    id: text("id").primaryKey(),
+    profileId: text("profile_id")
+      .notNull()
+      .references(() => moneyForwardProfiles.id, { onDelete: "cascade" }),
+    mfGroupId: text("mf_group_id").notNull(),
+    name: text("name").notNull(),
+    isCurrent: integer("is_current", { mode: "boolean" }).default(false),
+    lastScrapedAt: text("last_scraped_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("groups_profile_mf_group_idx").on(table.profileId, table.mfGroupId),
+    uniqueIndex("groups_profile_id_pair_idx").on(table.profileId, table.id),
+    index("groups_profile_id_idx").on(table.profileId),
+  ],
+);
 
 // グループとアカウントの多対多関係を管理する中間テーブル
 export const groupAccounts = sqliteTable(
   "group_accounts",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    groupId: text("group_id")
+    profileId: text("profile_id")
       .notNull()
-      .references(() => groups.id, { onDelete: "cascade" }),
-    accountId: integer("account_id")
-      .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
+      .references(() => moneyForwardProfiles.id, { onDelete: "cascade" }),
+    groupId: text("group_id").notNull(),
+    accountId: integer("account_id").notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
+    foreignKey({
+      name: "group_accounts_profile_group_fk",
+      columns: [table.profileId, table.groupId],
+      foreignColumns: [groups.profileId, groups.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "group_accounts_profile_account_fk",
+      columns: [table.profileId, table.accountId],
+      foreignColumns: [accounts.profileId, accounts.id],
+    }).onDelete("cascade"),
     uniqueIndex("group_accounts_group_account_idx").on(table.groupId, table.accountId),
     index("group_accounts_group_id_idx").on(table.groupId),
     index("group_accounts_account_id_idx").on(table.accountId),
@@ -47,7 +88,10 @@ export const accounts = sqliteTable(
   "accounts",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    mfId: text("mf_id").notNull().unique(),
+    profileId: text("profile_id")
+      .notNull()
+      .references(() => moneyForwardProfiles.id, { onDelete: "cascade" }),
+    mfId: text("mf_id").notNull(),
     name: text("name").notNull(),
     type: text("type").notNull(), // "自動連携" / "手動"
     institution: text("institution"),
@@ -58,7 +102,12 @@ export const accounts = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     isActive: integer("is_active", { mode: "boolean" }).default(true),
   },
-  (table) => [index("accounts_category_id_idx").on(table.categoryId)],
+  (table) => [
+    uniqueIndex("accounts_profile_mf_id_idx").on(table.profileId, table.mfId),
+    uniqueIndex("accounts_profile_id_pair_idx").on(table.profileId, table.id),
+    index("accounts_profile_id_idx").on(table.profileId),
+    index("accounts_category_id_idx").on(table.categoryId),
+  ],
 );
 
 export const assetCategories = sqliteTable("asset_categories", {
@@ -98,10 +147,11 @@ export const holdings = sqliteTable(
   "holdings",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    mfId: text("mf_id").unique(), // MFの識別子（ない場合もある）
-    accountId: integer("account_id")
+    profileId: text("profile_id")
       .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
+      .references(() => moneyForwardProfiles.id, { onDelete: "cascade" }),
+    mfId: text("mf_id"), // MFのraw識別子（ない場合もある）
+    accountId: integer("account_id").notNull(),
     categoryId: integer("category_id").references(() => assetCategories.id, {
       onDelete: "set null",
     }), // 負債はnull
@@ -113,7 +163,16 @@ export const holdings = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     isActive: integer("is_active", { mode: "boolean" }).default(true),
   },
-  (table) => [index("holdings_account_id_idx").on(table.accountId)],
+  (table) => [
+    foreignKey({
+      name: "holdings_profile_account_fk",
+      columns: [table.profileId, table.accountId],
+      foreignColumns: [accounts.profileId, accounts.id],
+    }).onDelete("cascade"),
+    uniqueIndex("holdings_profile_mf_id_idx").on(table.profileId, table.mfId),
+    index("holdings_profile_id_idx").on(table.profileId),
+    index("holdings_account_id_idx").on(table.accountId),
+  ],
 );
 
 // ============================================================================
@@ -169,11 +228,12 @@ export const transactions = sqliteTable(
   "transactions",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    mfId: text("mf_id").notNull().unique(),
+    profileId: text("profile_id")
+      .notNull()
+      .references(() => moneyForwardProfiles.id, { onDelete: "cascade" }),
+    mfId: text("mf_id").notNull(),
     date: text("date").notNull(),
-    accountId: integer("account_id").references(() => accounts.id, {
-      onDelete: "cascade",
-    }),
+    accountId: integer("account_id"),
     category: text("category"), // 大項目 null = 振替（カテゴリなし）
     subCategory: text("sub_category"), // 中項目
     description: text("description"),
@@ -193,6 +253,15 @@ export const transactions = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
+    foreignKey({
+      name: "transactions_profile_account_fk",
+      columns: [table.profileId, table.accountId],
+      foreignColumns: [accounts.profileId, accounts.id],
+    }).onDelete("cascade"),
+    uniqueIndex("transactions_profile_mf_id_idx").on(table.profileId, table.mfId),
+    index("transactions_profile_id_idx").on(table.profileId),
+    index("transactions_profile_date_idx").on(table.profileId, table.date),
+    index("transactions_profile_account_idx").on(table.profileId, table.accountId),
     index("transactions_date_idx").on(table.date),
     index("transactions_account_id_idx").on(table.accountId),
   ],
@@ -268,7 +337,19 @@ export const spendingTargets = sqliteTable(
 // リレーション定義
 // ============================================================================
 
-export const groupsRelations = relations(groups, ({ many }) => ({
+export const moneyForwardProfilesRelations = relations(moneyForwardProfiles, ({ many }) => ({
+  groups: many(groups),
+  accounts: many(accounts),
+  groupAccounts: many(groupAccounts),
+  holdings: many(holdings),
+  transactions: many(transactions),
+}));
+
+export const groupsRelations = relations(groups, ({ one, many }) => ({
+  profile: one(moneyForwardProfiles, {
+    fields: [groups.profileId],
+    references: [moneyForwardProfiles.id],
+  }),
   snapshots: many(dailySnapshots),
   groupAccounts: many(groupAccounts),
   assetHistories: many(assetHistory),
@@ -276,17 +357,25 @@ export const groupsRelations = relations(groups, ({ many }) => ({
 }));
 
 export const groupAccountsRelations = relations(groupAccounts, ({ one }) => ({
+  profile: one(moneyForwardProfiles, {
+    fields: [groupAccounts.profileId],
+    references: [moneyForwardProfiles.id],
+  }),
   group: one(groups, {
-    fields: [groupAccounts.groupId],
-    references: [groups.id],
+    fields: [groupAccounts.profileId, groupAccounts.groupId],
+    references: [groups.profileId, groups.id],
   }),
   account: one(accounts, {
-    fields: [groupAccounts.accountId],
-    references: [accounts.id],
+    fields: [groupAccounts.profileId, groupAccounts.accountId],
+    references: [accounts.profileId, accounts.id],
   }),
 }));
 
 export const accountsRelations = relations(accounts, ({ many, one }) => ({
+  profile: one(moneyForwardProfiles, {
+    fields: [accounts.profileId],
+    references: [moneyForwardProfiles.id],
+  }),
   holdings: many(holdings),
   status: one(accountStatuses, {
     fields: [accounts.id],
@@ -304,9 +393,13 @@ export const accountStatusesRelations = relations(accountStatuses, ({ one }) => 
 }));
 
 export const holdingsRelations = relations(holdings, ({ one, many }) => ({
+  profile: one(moneyForwardProfiles, {
+    fields: [holdings.profileId],
+    references: [moneyForwardProfiles.id],
+  }),
   account: one(accounts, {
-    fields: [holdings.accountId],
-    references: [accounts.id],
+    fields: [holdings.profileId, holdings.accountId],
+    references: [accounts.profileId, accounts.id],
   }),
   category: one(assetCategories, {
     fields: [holdings.categoryId],
@@ -335,9 +428,13 @@ export const holdingValuesRelations = relations(holdingValues, ({ one }) => ({
 }));
 
 export const transactionsRelations = relations(transactions, ({ one }) => ({
+  profile: one(moneyForwardProfiles, {
+    fields: [transactions.profileId],
+    references: [moneyForwardProfiles.id],
+  }),
   account: one(accounts, {
-    fields: [transactions.accountId],
-    references: [accounts.id],
+    fields: [transactions.profileId, transactions.accountId],
+    references: [accounts.profileId, accounts.id],
   }),
 }));
 

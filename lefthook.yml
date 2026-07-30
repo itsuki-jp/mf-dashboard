@@ -12,13 +12,3 @@ pre-commit:
       glob: "*.{ts,tsx,js,jsx}"
       run: pnpm knip --fix
       stage_fixed: true
-
-post-merge:
-  commands:
-    clean-wal:
-      run: rm -f data/*.db-shm data/*.db-wal
-
-post-checkout:
-  commands:
-    clean-wal:
-      run: rm -f data/*.db-shm data/*.db-wal

@@ -76,7 +76,7 @@ beforeEach(async () => {
   vi.mocked(runSavePhase).mockResolvedValue([]);
   vi.mocked(runInstitutionCategoryPhase).mockResolvedValue(new Map([["account-a", "銀行"]]));
   vi.mocked(runCashFlowHistoryPhase).mockImplementation(
-    async (_db, _page, _config, _categoryDecision, _progress, publishHistory) => {
+    async (_db, _profileId, _page, _config, _categoryDecision, _progress, publishHistory) => {
       if (!publishHistory) throw new Error("publishHistory is required");
       await publishHistory([]);
     },
@@ -214,7 +214,7 @@ describe("runCrawler progress", () => {
     });
     const historyMonths = [{ items: [], month: "2026-06" }];
     vi.mocked(runCashFlowHistoryPhase).mockImplementation(
-      async (_db, _page, _config, _categoryDecision, _progress, publishHistory) => {
+      async (_db, _profileId, _page, _config, _categoryDecision, _progress, publishHistory) => {
         if (!publishHistory) throw new Error("publishHistory is required");
         await publishHistory(historyMonths);
       },
@@ -228,6 +228,7 @@ describe("runCrawler progress", () => {
     await runCrawler(progress);
 
     expect(runSavePhase).toHaveBeenCalledWith(
+      expect.anything(),
       expect.anything(),
       expect.anything(),
       expect.anything(),
