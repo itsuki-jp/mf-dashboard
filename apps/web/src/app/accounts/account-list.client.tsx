@@ -67,6 +67,8 @@ export function AccountListClient({ groupedAccounts, groupId }: AccountListClien
                     status={account.status}
                     lastUpdated={account.lastUpdated}
                     totalAssets={account.totalAssets}
+                    currentMonthExpense={account.currentMonthExpense}
+                    categoryName={group.categoryName}
                     groupId={
                       groupId ??
                       (account.profileId ? createProfileScopeId(account.profileId) : undefined)

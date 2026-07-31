@@ -9,6 +9,7 @@ type Account = {
   status: "ok" | "error" | "updating" | "suspended" | "unknown";
   lastUpdated: string | null;
   totalAssets: number;
+  currentMonthExpense: number;
   categoryId: number | null;
   categoryName: string;
   categoryDisplayOrder: number;
@@ -23,6 +24,7 @@ function makeAccount(overrides: Partial<Account> = {}): Account {
     status: "ok",
     lastUpdated: null,
     totalAssets: 0,
+    currentMonthExpense: 0,
     categoryId: 1,
     categoryName: "銀行",
     categoryDisplayOrder: 1,

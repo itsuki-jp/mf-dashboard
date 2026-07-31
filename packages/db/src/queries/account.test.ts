@@ -1,3 +1,4 @@
+import { getJstYearMonthKey, shiftYearMonthKey } from "@mf-dashboard/date-utils";
 import { eq } from "drizzle-orm";
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
@@ -118,6 +119,38 @@ async function createAccountStatus(
       lastUpdated: data.lastUpdated ?? now,
       totalAssets: data.totalAssets ?? 0,
       errorMessage: data.errorMessage ?? null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+}
+
+async function createTestTransaction(
+  accountId: number,
+  data: {
+    date: string;
+    amount: number;
+    type: "income" | "expense" | "transfer";
+    excluded?: boolean;
+  },
+) {
+  const now = new Date().toISOString();
+  await db
+    .insert(schema.transactions)
+    .values({
+      profileId: "primary",
+      mfId: `tx-${accountId}-${data.date}-${data.amount}-${Math.random()}`,
+      date: data.date,
+      accountId,
+      category: null,
+      subCategory: null,
+      description: "Test transaction",
+      amount: data.amount,
+      type: data.type,
+      isTransfer: data.type === "transfer",
+      isExcludedFromCalculation: data.excluded ?? data.type === "transfer",
+      transferTarget: null,
+      transferTargetAccountId: null,
       createdAt: now,
       updatedAt: now,
     })
@@ -458,7 +491,52 @@ describe("getAccountsWithAssets", () => {
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Bank A");
     expect(result[0].totalAssets).toBe(100000);
+    expect(result[0].currentMonthExpense).toBe(0);
     expect(result[0].categoryName).toBe("銀行");
+  });
+
+  it("今月の支出だけをアカウント別に集計し、収入・振替・計算対象外・前月分を除外する", async () => {
+    const categoryId = await createCategory("カード", 4);
+    const accountId = await createTestAccount({
+      mfId: "card-mf1",
+      name: "Card A",
+      type: "手動",
+      categoryId,
+    });
+    await createAccountStatus(accountId, { totalAssets: 0 });
+
+    const currentMonth = getJstYearMonthKey();
+    await createTestTransaction(accountId, {
+      date: `${currentMonth}-05`,
+      amount: 1200,
+      type: "expense",
+    });
+    await createTestTransaction(accountId, {
+      date: `${currentMonth}-06`,
+      amount: 500000,
+      type: "income",
+    });
+    await createTestTransaction(accountId, {
+      date: `${currentMonth}-07`,
+      amount: 3000,
+      type: "transfer",
+    });
+    await createTestTransaction(accountId, {
+      date: `${currentMonth}-08`,
+      amount: 4000,
+      type: "expense",
+      excluded: true,
+    });
+    await createTestTransaction(accountId, {
+      date: `${shiftYearMonthKey(currentMonth, -1)}-15`,
+      amount: 5000,
+      type: "expense",
+    });
+
+    const result = await getAccountsWithAssets(undefined, db);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].currentMonthExpense).toBe(1200);
   });
 
   it("nullフィールドにデフォルト値を適用する", async () => {

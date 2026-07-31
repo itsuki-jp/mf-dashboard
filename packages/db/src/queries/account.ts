@@ -1,3 +1,4 @@
+import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import { eq, and, sql, inArray, asc } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupIds, getAccountIdsForGroups } from "../shared/group-filter";
@@ -13,6 +14,7 @@ export interface DashboardAccountListItem {
   status: AccountStatusType;
   lastUpdated: string | null;
   totalAssets: number;
+  currentMonthExpense: number;
   categoryId: number | null;
   categoryName: string;
   categoryDisplayOrder: number;
@@ -130,7 +132,33 @@ export async function getAccountsWithAssets(
     .orderBy(asc(schema.accounts.profileId), asc(schema.accounts.id))
     .all();
 
-  return results.map((account) => normalizeAccount(account));
+  const currentMonth = getJstYearMonthKey();
+  const expenseRows = await db
+    .select({
+      accountId: schema.transactions.accountId,
+      total: sql<number>`coalesce(sum(${schema.transactions.amount}), 0)`,
+    })
+    .from(schema.transactions)
+    .where(
+      and(
+        inArray(schema.transactions.accountId, accountIds),
+        eq(schema.transactions.type, "expense"),
+        eq(schema.transactions.isExcludedFromCalculation, false),
+        sql`${schema.transactions.date} like ${`${currentMonth}%`}`,
+      ),
+    )
+    .groupBy(schema.transactions.accountId)
+    .all();
+  const currentMonthExpenseByAccountId = new Map(
+    expenseRows.map((row) => [row.accountId, row.total ?? 0]),
+  );
+
+  return results.map((account) =>
+    normalizeAccount({
+      ...account,
+      currentMonthExpense: currentMonthExpenseByAccountId.get(account.id) ?? 0,
+    }),
+  );
 }
 
 /**

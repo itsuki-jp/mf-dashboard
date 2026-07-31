@@ -14,6 +14,8 @@ type AccountCardProps = {
   status: AccountStatusType;
   lastUpdated: string | null;
   totalAssets: number;
+  currentMonthExpense: number;
+  categoryName: string;
   groupId?: string;
 };
 
@@ -25,10 +27,14 @@ export function AccountCard({
   status,
   lastUpdated,
   totalAssets,
+  currentMonthExpense,
+  categoryName,
   groupId,
 }: AccountCardProps) {
   const href = buildGroupPath(groupId, `accounts/${encodeURIComponent(mfId)}`);
   const isLinkable = mfId !== "unknown";
+  const isCard = categoryName === "カード" || categoryName === "クレジットカード";
+  const displayAmount = isCard && currentMonthExpense > 0 ? -currentMonthExpense : totalAssets;
 
   return (
     <Card
@@ -49,7 +55,13 @@ export function AccountCard({
         </div>
 
         <div className="mb-3">
-          <AmountDisplay amount={totalAssets} size="2xl" weight="bold" />
+          {isCard && <div className="mb-1 text-sm text-muted-foreground">今月利用額</div>}
+          <AmountDisplay
+            amount={displayAmount}
+            type={isCard ? "expense" : undefined}
+            size="2xl"
+            weight="bold"
+          />
         </div>
 
         <div className="flex items-center justify-between h-5">
