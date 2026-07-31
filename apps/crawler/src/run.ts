@@ -34,9 +34,24 @@ import {
 import { createGroupScope } from "./scrapers/group.js";
 import { notifyWebRefresh } from "./web-refresh.js";
 
-export async function runCrawler(progress: CrawlerProgressReporter): Promise<void> {
+interface RunCrawlerOptions {
+  profileId?: string;
+}
+
+export async function runCrawler(
+  progress: CrawlerProgressReporter,
+  options: RunCrawlerOptions = {},
+): Promise<void> {
   const { crawler: config, profiles } = await runLoadPhase();
   const failures: unknown[] = [];
+  const enabledProfiles = profiles.filter(({ enabled }) => enabled);
+  const selectedProfiles = options.profileId
+    ? enabledProfiles.filter(({ id }) => id === options.profileId)
+    : enabledProfiles;
+
+  if (options.profileId && selectedProfiles.length === 0) {
+    throw new Error("Requested Money Forward profile is not enabled");
+  }
 
   try {
     const db = await initDb();
@@ -45,7 +60,7 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
     closeDb();
   }
 
-  for (const profile of profiles.filter(({ enabled }) => enabled)) {
+  for (const profile of selectedProfiles) {
     const profileProgress = createProfileProgressReporter(progress, profile.id);
     try {
       await runProfileCrawler(config, profile, profileProgress);

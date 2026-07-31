@@ -191,7 +191,9 @@ describe("crawler trigger server", () => {
   });
 
   test("starts a manual run", async () => {
-    const startRun = vi.fn<() => Promise<CrawlerRunState>>(async () => runningState);
+    const startRun = vi.fn<(profileId?: string) => Promise<CrawlerRunState>>(
+      async () => runningState,
+    );
     const baseUrl = await listen(createCrawlerTriggerServer({ startRun }));
 
     const res = await fetch(`${baseUrl}/runs`, {
@@ -201,7 +203,45 @@ describe("crawler trigger server", () => {
 
     expect(res.status).toBe(202);
     await expect(res.json()).resolves.toEqual(runningState);
-    expect(startRun).toHaveBeenCalledTimes(1);
+    expect(startRun).toHaveBeenCalledWith(undefined);
+  });
+
+  test("starts only the requested profile", async () => {
+    const startRun = vi.fn<(profileId?: string) => Promise<CrawlerRunState>>(
+      async () => runningState,
+    );
+    const baseUrl = await listen(createCrawlerTriggerServer({ startRun }));
+
+    const res = await fetch(`${baseUrl}/runs`, {
+      method: "POST",
+      headers: { ...authorizationHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ profileId: "secondary" }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(startRun).toHaveBeenCalledWith("secondary");
+  });
+
+  test.each([
+    JSON.stringify({ profileId: "../primary" }),
+    JSON.stringify({ profileId: 123 }),
+    JSON.stringify({ unsupported: true }),
+    "{",
+  ])("rejects an invalid profile selection: %s", async (body) => {
+    const startRun = vi.fn<(profileId?: string) => Promise<CrawlerRunState>>(
+      async () => runningState,
+    );
+    const baseUrl = await listen(createCrawlerTriggerServer({ startRun }));
+
+    const res = await fetch(`${baseUrl}/runs`, {
+      method: "POST",
+      headers: { ...authorizationHeaders, "content-type": "application/json" },
+      body,
+    });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: "invalid profile selection" });
+    expect(startRun).not.toHaveBeenCalled();
   });
 
   test("returns conflict when a run is already active", async () => {

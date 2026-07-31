@@ -6,6 +6,14 @@ import { ActionIcons } from "./action-icons";
 
 const startedAt = "2026-01-01T00:00:00.000Z";
 
+const idleStatus: CrawlerRefreshStatus = {
+  available: true,
+  running: false,
+  source: null,
+  startedAt: null,
+  latestRun: null,
+};
+
 const runningStatus: CrawlerRefreshStatus = {
   available: true,
   running: true,
@@ -166,6 +174,29 @@ export const HeaderWithNotifications: Story = {
         totalIssues={2}
       />
     ),
+  },
+};
+
+export const TargetSelection: Story = {
+  args: {
+    variant: "header",
+    profiles: [
+      { id: "primary", name: "Primary" },
+      { id: "secondary", name: "Secondary" },
+    ],
+    selectedProfileId: "secondary",
+  },
+  beforeEach: () => mockCrawlerStatus(idleStatus),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "金融機関データを更新" }));
+
+    const popover = within(canvasElement.ownerDocument.body).getByRole("dialog");
+    await waitFor(() =>
+      expect(within(popover).getByRole("button", { name: "すべて更新" })).toBeVisible(),
+    );
+    await expect(within(popover).getByRole("button", { name: "Primaryだけ更新" })).toBeVisible();
+    await expect(within(popover).getByRole("button", { name: "Secondaryだけ更新" })).toBeVisible();
   },
 };
 
