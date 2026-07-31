@@ -1,12 +1,35 @@
 import type { Page } from "playwright";
 import { describe, expect, test, vi } from "vitest";
 import {
+  clickRefreshButton,
   getMaxWaitMinutes,
   getRefreshStatus,
   navigateToAccountsPage,
   summarizeRefreshRows,
   type RefreshStatusRow,
 } from "./refresh.js";
+
+describe("clickRefreshButton", () => {
+  test("明示的なサービス未連携画面では一括更新を成功扱いでスキップする", async () => {
+    const refreshButton = { click: vi.fn<() => Promise<void>>() };
+    const noServiceState = {
+      isVisible: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+    };
+    const page = {
+      goto: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      waitForLoadState: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      locator: vi.fn<(selector: string) => typeof refreshButton | typeof noServiceState>(
+        (selector) => (selector === ".heading-no-service" ? noServiceState : refreshButton),
+      ),
+    } as unknown as Page;
+
+    await expect(clickRefreshButton(page)).resolves.toEqual({
+      completed: true,
+      incompleteAccounts: [],
+    });
+    expect(refreshButton.click).not.toHaveBeenCalled();
+  });
+});
 
 describe("getMaxWaitMinutes", () => {
   test.each([undefined, "", "0", "-1", "Infinity", "NaN"])(

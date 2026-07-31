@@ -115,6 +115,11 @@ export async function clickRefreshButton(
   await page.goto(mfUrls.home);
   await page.waitForLoadState("networkidle");
 
+  if (await page.locator(".heading-no-service").isVisible()) {
+    info("No linked services; skipped account refresh.");
+    return { completed: true, incompleteAccounts: [] };
+  }
+
   const refreshButton = page.locator('a:has-text("一括更新")').first();
   await refreshButton.click();
 
