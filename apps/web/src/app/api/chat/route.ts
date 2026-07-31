@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { financeChartSchema, type FinanceChart } from "@mf-dashboard/analytics/chat/chart";
 import { createFinanceChatTools } from "@mf-dashboard/analytics/chat/tools";
 import { getModel, isLLMEnabled } from "@mf-dashboard/analytics/config";
-import { getAllGroups, getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
+import { getAllGroups, getDb, isDatabaseAvailable, resolveGroupIds } from "@mf-dashboard/db";
 import {
   consumeStream,
   convertToModelMessages,
@@ -259,9 +259,20 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const db = getDb();
-  const group = requestedGroupId
-    ? (await getAllGroups(db)).find(({ id }) => id === requestedGroupId)
-    : await getCurrentGroup(db);
+  const resolvedGroupIds = await resolveGroupIds(db, requestedGroupId as string | undefined);
+
+  if (resolvedGroupIds.length > 1) {
+    return errorResponse(
+      409,
+      "MULTI_PROFILE_CHAT_UNSUPPORTED",
+      "AIチャットでは表示対象を1つのプロフィールまたはグループに絞ってください。",
+    );
+  }
+
+  const resolvedGroupId = resolvedGroupIds[0];
+  const group = resolvedGroupId
+    ? (await getAllGroups(db)).find(({ id }) => id === resolvedGroupId)
+    : undefined;
 
   if (!group && requestedGroupId) {
     return errorResponse(404, "GROUP_NOT_FOUND", "指定されたグループが見つかりません。");

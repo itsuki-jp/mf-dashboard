@@ -130,6 +130,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
     draft,
     error,
     isOpen,
+    isAvailable,
     isSubmitting,
     messages,
     open,
@@ -254,6 +255,8 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
     const delta = event.key === "ArrowLeft" ? PANEL_RESIZE_STEP : -PANEL_RESIZE_STEP;
     setPanelWidth((width) => clampPanelWidth(width + delta));
   };
+
+  if (isAvailable === false) return null;
 
   return (
     <>

@@ -1,8 +1,9 @@
+import { eq } from "drizzle-orm";
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
 import { activateMoneyForwardProfile } from "../repositories/profiles";
 import { createTestDb, resetTestDb, closeTestDb, createTestProfile } from "../test-helpers";
-import { getCurrentGroup, getAllGroups } from "./groups";
+import { getCurrentGroup, getAllGroups, getDashboardProfiles } from "./groups";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
 let db: Db;
@@ -126,5 +127,46 @@ describe("getAllGroups", () => {
 
     await expect(getCurrentGroup(db)).resolves.toMatchObject({ id: "secondary:shared" });
     await expect(getAllGroups(db)).resolves.toMatchObject([{ id: "secondary:shared" }]);
+  });
+});
+
+describe("getDashboardProfiles", () => {
+  it("enabled profileの公開metadataとcurrent groupを返す", async () => {
+    const now = new Date().toISOString();
+    await createTestProfile(db, "secondary");
+    await db
+      .update(schema.moneyForwardProfiles)
+      .set({ lastScrapedAt: now, lastStatus: "success", updatedAt: now })
+      .where(eq(schema.moneyForwardProfiles.id, "secondary"));
+    await db.insert(schema.groups).values({
+      id: "secondary:global",
+      profileId: "secondary",
+      mfGroupId: "0",
+      name: "Secondary Global",
+      isCurrent: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(getDashboardProfiles(db)).resolves.toContainEqual({
+      id: "secondary",
+      name: "Secondary",
+      lastScrapedAt: now,
+      lastStatus: "success",
+      currentGroupId: "secondary:global",
+    });
+  });
+
+  it("disabled profileを返さない", async () => {
+    await createTestProfile(db, "secondary");
+    const now = new Date().toISOString();
+    await db
+      .update(schema.moneyForwardProfiles)
+      .set({ enabled: false, updatedAt: now })
+      .where(eq(schema.moneyForwardProfiles.id, "secondary"));
+
+    await expect(getDashboardProfiles(db)).resolves.not.toContainEqual(
+      expect.objectContaining({ id: "secondary" }),
+    );
   });
 });

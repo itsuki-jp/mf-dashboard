@@ -10,7 +10,8 @@ export interface MoneyForwardProfileInput {
 }
 
 export interface MoneyForwardProfileScrapeStatus {
-  lastScrapedAt: string | null;
+  /** Omit while a run is starting or failing to preserve the last successful scrape time. */
+  lastScrapedAt?: string | null;
   lastStatus: string | null;
   lastError: string | null;
 }

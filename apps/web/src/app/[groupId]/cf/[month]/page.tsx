@@ -1,23 +1,37 @@
-import { getAllGroups, getAvailableMonths, isDatabaseAvailable } from "@mf-dashboard/db";
+import {
+  createProfileScopeId,
+  getAllGroups,
+  getAvailableMonths,
+  getDashboardProfiles,
+  isDatabaseAvailable,
+} from "@mf-dashboard/db";
 import type { Metadata } from "next";
 import { CFMonthContent } from "../../../cf/[month]/page";
 import { formatCashFlowPageTitle } from "../../../cf/[month]/page-title";
 
 export async function generateStaticParams() {
   if (!isDatabaseAvailable()) return [{ groupId: "_", month: "_" }];
-  const groups = (await getAllGroups()).filter((g) => !g.isCurrent);
-  if (groups.length === 0) return [{ groupId: "_", month: "_" }];
+  const groups = await getAllGroups();
+  const profiles = await getDashboardProfiles();
 
   const params: { groupId: string; month: string }[] = [];
+
+  for (const profile of profiles) {
+    const groupId = createProfileScopeId(profile.id);
+    const months = await getAvailableMonths(groupId);
+    for (const { month } of months) {
+      params.push({ groupId, month });
+    }
+  }
 
   for (const group of groups) {
     const months = await getAvailableMonths(group.id);
     for (const { month } of months) {
-      params.push({ groupId: group.mfGroupId, month });
+      params.push({ groupId: group.id, month });
     }
   }
 
-  return params;
+  return params.length > 0 ? params : [{ groupId: "_", month: "_" }];
 }
 
 export async function generateMetadata({

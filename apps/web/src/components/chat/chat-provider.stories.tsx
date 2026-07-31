@@ -15,6 +15,7 @@ type Story = StoryObj<typeof meta>;
 export const WithOpenChat: Story = {
   args: {
     children: <ChatShell />,
+    currentGroupId: "group-a",
     initialOpen: true,
   },
 };

@@ -4,9 +4,9 @@ import {
   getEndOfPreviousMonthIsoDateKey,
   parseIsoDateKey,
 } from "@mf-dashboard/date-utils";
-import { desc, eq, sql, and } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
-import { resolveGroupId } from "../shared/group-filter";
+import { resolveGroupIds } from "../shared/group-filter";
 import { getHoldingsWithLatestValues } from "./holding";
 
 /**
@@ -21,6 +21,91 @@ export function parseDateString(dateStr: string): { year: number; month: number;
  */
 export function toDateString(year: number, month: number, day: number): string {
   return formatIsoDateKey({ year, month, day });
+}
+
+interface AggregatedAssetHistoryEntry {
+  date: string;
+  totalAssets: number;
+  categories: Record<string, number>;
+}
+
+/**
+ * profileごとの履歴を日付単位で合算する。
+ * 更新日がずれる場合は、各profileでその日以前の直近値を使用する。
+ */
+async function getAggregatedAssetHistory(
+  scopeId: string | undefined,
+  db: Db,
+): Promise<AggregatedAssetHistoryEntry[]> {
+  const groupIds = await resolveGroupIds(db, scopeId);
+  if (groupIds.length === 0) return [];
+
+  const historyRows = await db
+    .select({
+      id: schema.assetHistory.id,
+      groupId: schema.assetHistory.groupId,
+      date: schema.assetHistory.date,
+      totalAssets: schema.assetHistory.totalAssets,
+    })
+    .from(schema.assetHistory)
+    .where(inArray(schema.assetHistory.groupId, groupIds))
+    .orderBy(schema.assetHistory.date)
+    .all();
+  if (historyRows.length === 0) return [];
+
+  const categoryRows = await db
+    .select({
+      assetHistoryId: schema.assetHistoryCategories.assetHistoryId,
+      categoryName: schema.assetHistoryCategories.categoryName,
+      amount: schema.assetHistoryCategories.amount,
+    })
+    .from(schema.assetHistoryCategories)
+    .where(
+      inArray(
+        schema.assetHistoryCategories.assetHistoryId,
+        historyRows.map((row) => row.id),
+      ),
+    )
+    .all();
+  const categoriesByHistoryId = new Map<number, Record<string, number>>();
+  for (const category of categoryRows) {
+    const categories = categoriesByHistoryId.get(category.assetHistoryId) ?? {};
+    categories[category.categoryName] = category.amount;
+    categoriesByHistoryId.set(category.assetHistoryId, categories);
+  }
+
+  const rowsByGroup = new Map<string, typeof historyRows>();
+  for (const groupId of groupIds) rowsByGroup.set(groupId, []);
+  for (const row of historyRows) rowsByGroup.get(row.groupId)?.push(row);
+
+  const dates = [...new Set(historyRows.map((row) => row.date))].sort();
+  const latestByGroup = new Map<string, (typeof historyRows)[number]>();
+  const offsets = new Map(groupIds.map((groupId) => [groupId, 0]));
+  const aggregated: AggregatedAssetHistoryEntry[] = [];
+
+  for (const date of dates) {
+    for (const groupId of groupIds) {
+      const rows = rowsByGroup.get(groupId) ?? [];
+      let offset = offsets.get(groupId) ?? 0;
+      while (offset < rows.length && rows[offset].date <= date) {
+        latestByGroup.set(groupId, rows[offset]);
+        offset += 1;
+      }
+      offsets.set(groupId, offset);
+    }
+
+    let totalAssets = 0;
+    const categories: Record<string, number> = {};
+    for (const row of latestByGroup.values()) {
+      totalAssets += row.totalAssets;
+      for (const [name, amount] of Object.entries(categoriesByHistoryId.get(row.id) ?? {})) {
+        categories[name] = (categories[name] ?? 0) + amount;
+      }
+    }
+    aggregated.push({ date, totalAssets, categories });
+  }
+
+  return aggregated.reverse();
 }
 
 /**
@@ -43,30 +128,11 @@ export function calculateTargetDate(
  * assetHistoryCategoriesから最新の値を取得
  */
 export async function getAssetBreakdownByCategory(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return [];
-
-  const latestHistory = await db
-    .select()
-    .from(schema.assetHistory)
-    .where(eq(schema.assetHistory.groupId, groupId))
-    .orderBy(desc(schema.assetHistory.date))
-    .limit(1)
-    .get();
-
-  if (!latestHistory) {
-    return [];
-  }
-
-  const categories = await db
-    .select()
-    .from(schema.assetHistoryCategories)
-    .where(eq(schema.assetHistoryCategories.assetHistoryId, latestHistory.id))
-    .all();
-
-  return categories
-    .filter((c) => c.amount > 0)
-    .map((c) => ({ category: c.categoryName, amount: c.amount }))
+  const latest = (await getAggregatedAssetHistory(groupIdParam, db))[0];
+  if (!latest) return [];
+  return Object.entries(latest.categories)
+    .filter(([, amount]) => amount > 0)
+    .map(([category, amount]) => ({ category, amount }))
     .sort((a, b) => b.amount - a.amount);
 }
 
@@ -109,19 +175,13 @@ export async function getAssetHistory(
   options?: { limit?: number; groupId?: string },
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, options?.groupId);
-  if (!groupId) return [];
-
-  const query = db
-    .select()
-    .from(schema.assetHistory)
-    .where(eq(schema.assetHistory.groupId, groupId))
-    .orderBy(desc(schema.assetHistory.date));
-
-  if (options?.limit) {
-    return await query.limit(options.limit).all();
-  }
-  return await query.all();
+  const history = await getAggregatedAssetHistory(options?.groupId, db);
+  const result = history.map(({ date, totalAssets }, index) => ({
+    date,
+    totalAssets,
+    change: totalAssets - (history[index + 1]?.totalAssets ?? totalAssets),
+  }));
+  return options?.limit ? result.slice(0, options.limit) : result;
 }
 
 /**
@@ -131,39 +191,8 @@ export async function getAssetHistoryWithCategories(
   options?: { limit?: number; groupId?: string },
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, options?.groupId);
-  if (!groupId) return [];
-
-  const historyEntries = await (async () => {
-    const query = db
-      .select()
-      .from(schema.assetHistory)
-      .where(eq(schema.assetHistory.groupId, groupId))
-      .orderBy(desc(schema.assetHistory.date));
-    return options?.limit ? await query.limit(options.limit).all() : await query.all();
-  })();
-
-  const results = [];
-  for (const entry of historyEntries) {
-    const cats = await db
-      .select()
-      .from(schema.assetHistoryCategories)
-      .where(eq(schema.assetHistoryCategories.assetHistoryId, entry.id))
-      .all();
-
-    const categories: Record<string, number> = {};
-    for (const cat of cats) {
-      categories[cat.categoryName] = cat.amount;
-    }
-
-    results.push({
-      date: entry.date,
-      totalAssets: entry.totalAssets,
-      categories,
-    });
-  }
-
-  return results;
+  const history = await getAggregatedAssetHistory(options?.groupId, db);
+  return options?.limit ? history.slice(0, options.limit) : history;
 }
 
 /**
@@ -173,17 +202,7 @@ export async function getLatestTotalAssets(
   groupIdParam?: string,
   db: Db = getDb(),
 ): Promise<number | null> {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return null;
-
-  const latest = await db
-    .select({ totalAssets: schema.assetHistory.totalAssets })
-    .from(schema.assetHistory)
-    .where(eq(schema.assetHistory.groupId, groupId))
-    .orderBy(desc(schema.assetHistory.date))
-    .limit(1)
-    .get();
-
+  const latest = (await getAggregatedAssetHistory(groupIdParam, db))[0];
   return latest?.totalAssets ?? null;
 }
 
@@ -191,16 +210,7 @@ export async function getLatestTotalAssets(
  * 日次資産変動を取得（今日vs昨日）
  */
 export async function getDailyAssetChange(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return null;
-
-  const latest = await db
-    .select()
-    .from(schema.assetHistory)
-    .where(eq(schema.assetHistory.groupId, groupId))
-    .orderBy(desc(schema.assetHistory.date))
-    .limit(2)
-    .all();
+  const latest = (await getAggregatedAssetHistory(groupIdParam, db)).slice(0, 2);
 
   if (latest.length < 2) {
     return null;
@@ -243,16 +253,8 @@ export async function getCategoryChangesForPeriod(
   groupIdParam?: string,
   db: Db = getDb(),
 ) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return null;
-
-  const latest = await db
-    .select()
-    .from(schema.assetHistory)
-    .where(eq(schema.assetHistory.groupId, groupId))
-    .orderBy(desc(schema.assetHistory.date))
-    .limit(1)
-    .get();
+  const history = await getAggregatedAssetHistory(groupIdParam, db);
+  const latest = history[0];
 
   if (!latest) {
     return null;
@@ -260,34 +262,20 @@ export async function getCategoryChangesForPeriod(
 
   const targetDateStr = calculateTargetDate(latest.date, period);
 
-  const previous = await db
-    .select()
-    .from(schema.assetHistory)
-    .where(
-      and(
-        eq(schema.assetHistory.groupId, groupId),
-        sql`${schema.assetHistory.date} <= ${targetDateStr}`,
-      ),
-    )
-    .orderBy(desc(schema.assetHistory.date))
-    .limit(1)
-    .get();
+  const previous = history.find((entry) => entry.date <= targetDateStr);
 
   if (!previous || previous.date === latest.date) {
     return null;
   }
 
-  const latestCategories = await db
-    .select()
-    .from(schema.assetHistoryCategories)
-    .where(eq(schema.assetHistoryCategories.assetHistoryId, latest.id))
-    .all();
-
-  const previousCategories = await db
-    .select()
-    .from(schema.assetHistoryCategories)
-    .where(eq(schema.assetHistoryCategories.assetHistoryId, previous.id))
-    .all();
+  const latestCategories = Object.entries(latest.categories).map(([categoryName, amount]) => ({
+    categoryName,
+    amount,
+  }));
+  const previousCategories = Object.entries(previous.categories).map(([categoryName, amount]) => ({
+    categoryName,
+    amount,
+  }));
 
   const categoryChanges = calculateCategoryChanges(latestCategories, previousCategories);
 

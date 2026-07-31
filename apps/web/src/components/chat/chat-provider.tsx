@@ -23,6 +23,7 @@ interface ChatContextValue {
   error?: Error;
   isOpen: boolean;
   isSubmitting: boolean;
+  isAvailable?: boolean;
   messages: UIMessage[];
   addUserMessage: (text: string) => void;
   clear: () => void;
@@ -76,11 +77,13 @@ export function ChatProvider({
   const pathname = usePathname();
   const explicitGroupId = pathname ? extractGroupIdFromPath(pathname) : null;
   const groupId = explicitGroupId ?? currentGroupId;
+  const isAvailable = groupId !== null;
 
   return (
     <GroupChatProvider
       key={groupId ?? "current"}
       groupId={groupId}
+      isAvailable={isAvailable}
       initialMessages={initialMessages}
       isOpen={isOpen}
       setIsOpen={setIsOpen}
@@ -93,6 +96,7 @@ export function ChatProvider({
 interface GroupChatProviderProps {
   children: ReactNode;
   groupId: string | null;
+  isAvailable: boolean;
   initialMessages: UIMessage[];
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
@@ -101,6 +105,7 @@ interface GroupChatProviderProps {
 function GroupChatProvider({
   children,
   groupId,
+  isAvailable,
   initialMessages,
   isOpen,
   setIsOpen,
@@ -146,7 +151,7 @@ function GroupChatProvider({
   }, [status]);
 
   const addUserMessage = (text: string) => {
-    if (isInFlightRef.current || isSubmitting) return;
+    if (!isAvailable || isInFlightRef.current || isSubmitting) return;
     isInFlightRef.current = true;
     void sendMessage({ text }, { body: { groupId } });
   };
@@ -158,6 +163,7 @@ function GroupChatProvider({
         error,
         isOpen,
         isSubmitting,
+        isAvailable,
         messages,
         addUserMessage,
         clear,

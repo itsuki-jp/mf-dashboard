@@ -1,5 +1,10 @@
 import { isLLMEnabled } from "@mf-dashboard/analytics/config";
-import { getAllGroups, getCurrentGroup, isDatabaseAvailable } from "@mf-dashboard/db";
+import {
+  getAllGroups,
+  getCurrentGroup,
+  getDashboardProfiles,
+  isDatabaseAvailable,
+} from "@mf-dashboard/db";
 import { DatabaseZap } from "lucide-react";
 import "./globals.css";
 import type { ReactNode } from "react";
@@ -38,17 +43,22 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     );
   } else {
     const groups = await getAllGroups();
+    const profiles = await getDashboardProfiles();
     const currentGroup = await getCurrentGroup();
-    const defaultGroupId = currentGroup?.mfGroupId ?? groups[0]?.mfGroupId ?? null;
+    const defaultGroupId = currentGroup?.id ?? groups[0]?.id ?? null;
     const dashboard = (
       <SidebarProvider>
         <Header
           groups={groups.map((group) => ({
-            id: group.mfGroupId,
+            id: group.id,
+            profileId: group.profileId,
+            profileName:
+              profiles.find((profile) => profile.id === group.profileId)?.name ?? group.profileId,
             name: group.name,
             isCurrent: group.isCurrent ?? false,
             lastScrapedAt: group.lastScrapedAt,
           }))}
+          profiles={profiles}
           defaultGroupId={defaultGroupId}
           notifications={<AccountNotifications />}
         />
@@ -64,7 +74,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       content = dashboard;
     } else {
       content = (
-        <ChatProvider currentGroupId={currentGroup?.id ?? null}>
+        <ChatProvider currentGroupId={profiles.length === 1 ? (currentGroup?.id ?? null) : null}>
           {dashboard}
           <ChatShell suggestedPrompts={parseChatSuggestedPrompts(process.env.AI_CHAT_PRESETS)} />
         </ChatProvider>

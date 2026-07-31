@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   releaseChatSlot: vi.fn<AnyMock>(),
   getAllGroups: vi.fn<AnyMock>(),
   getCurrentGroup: vi.fn<AnyMock>(),
+  resolveGroupIds: vi.fn<AnyMock>(),
   getDb: vi.fn<AnyMock>(),
   getModel: vi.fn<AnyMock>(),
   isDatabaseAvailable: vi.fn<AnyMock>(),
@@ -43,6 +44,7 @@ vi.mock("@mf-dashboard/analytics/config", () => ({
 vi.mock("@mf-dashboard/db", () => ({
   getAllGroups: mocks.getAllGroups,
   getCurrentGroup: mocks.getCurrentGroup,
+  resolveGroupIds: mocks.resolveGroupIds,
   getDb: mocks.getDb,
   isDatabaseAvailable: mocks.isDatabaseAvailable,
 }));
@@ -88,6 +90,9 @@ describe("POST /api/chat", () => {
       { id: "group-b", isCurrent: false },
     ]);
     mocks.getCurrentGroup.mockResolvedValue({ id: "group-a" });
+    mocks.resolveGroupIds.mockImplementation((_db: unknown, scopeId?: string) =>
+      Promise.resolve([scopeId ?? "group-a"]),
+    );
     mocks.getModel.mockReturnValue("test-model");
     mocks.acquireChatSlot.mockReturnValue(mocks.releaseChatSlot);
     mocks.createFinanceChatTools.mockReturnValue(tools);
@@ -632,6 +637,30 @@ describe("POST /api/chat", () => {
     expect(mocks.createFinanceChatTools).toHaveBeenCalledWith(db, "group-b");
   });
 
+  it("profile scopeを実groupへ解決してfinance toolsを分離する", async () => {
+    mocks.resolveGroupIds.mockResolvedValue(["group-b"]);
+
+    const response = await POST(request({ groupId: "profile--profile_b", messages }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.createFinanceChatTools).toHaveBeenCalledWith(db, "group-b");
+  });
+
+  it("複数profileの全体scopeを単一groupへ縮退させない", async () => {
+    mocks.resolveGroupIds.mockResolvedValue(["group-a", "group-b"]);
+
+    const response = await POST(request({ messages }));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "MULTI_PROFILE_CHAT_UNSUPPORTED",
+        message: "AIチャットでは表示対象を1つのプロフィールまたはグループに絞ってください。",
+      },
+    });
+    expect(mocks.createFinanceChatTools).not.toHaveBeenCalled();
+  });
+
   it("rejects an unknown requested group", async () => {
     const response = await POST(request({ groupId: "group-unknown", messages }));
 
@@ -643,7 +672,7 @@ describe("POST /api/chat", () => {
   });
 
   it("returns a conflict when no current group exists", async () => {
-    mocks.getCurrentGroup.mockResolvedValue(undefined);
+    mocks.resolveGroupIds.mockResolvedValue([]);
 
     const response = await POST(request({ messages }));
 

@@ -2,7 +2,14 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
 import { activateMoneyForwardProfile } from "../repositories/profiles";
 import { closeTestDb, createTestDb, createTestProfile, resetTestDb } from "../test-helpers";
-import { getDefaultGroupId, resolveGroupId, getAccountIdsForGroup } from "./group-filter";
+import {
+  createProfileScopeId,
+  getAccountIdsForGroup,
+  getAccountIdsForGroups,
+  getDefaultGroupId,
+  resolveGroupId,
+  resolveGroupIds,
+} from "./group-filter";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
 let db: Db;
@@ -114,6 +121,108 @@ describe("resolveGroupId", () => {
   });
 });
 
+describe("resolveGroupIds", () => {
+  it("未指定ならenabledな全profileのcurrent groupを返す", async () => {
+    const now = new Date().toISOString();
+    await createTestProfile(db, "secondary");
+    await db.insert(schema.groups).values([
+      {
+        id: "primary:global",
+        profileId: "primary",
+        mfGroupId: "0",
+        name: "Primary Global",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "secondary:global",
+        profileId: "secondary",
+        mfGroupId: "0",
+        name: "Secondary Global",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    await expect(resolveGroupIds(db)).resolves.toEqual(["primary:global", "secondary:global"]);
+  });
+
+  it("profile scopeなら対象profileのcurrent groupだけを返す", async () => {
+    const now = new Date().toISOString();
+    await createTestProfile(db, "secondary");
+    await db.insert(schema.groups).values([
+      {
+        id: "primary:global",
+        profileId: "primary",
+        mfGroupId: "0",
+        name: "Primary Global",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "secondary:global",
+        profileId: "secondary",
+        mfGroupId: "0",
+        name: "Secondary Global",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    await expect(resolveGroupIds(db, createProfileScopeId("secondary"))).resolves.toEqual([
+      "secondary:global",
+    ]);
+  });
+
+  it("同じmfGroupIdが複数profileにある曖昧な指定はfail closedする", async () => {
+    const now = new Date().toISOString();
+    await createTestProfile(db, "secondary");
+    await db.insert(schema.groups).values([
+      {
+        id: "primary:shared",
+        profileId: "primary",
+        mfGroupId: "shared",
+        name: "Primary Group",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "secondary:shared",
+        profileId: "secondary",
+        mfGroupId: "shared",
+        name: "Secondary Group",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    await expect(resolveGroupIds(db, "shared")).resolves.toEqual([]);
+  });
+
+  it("URL encodeされた内部group IDを解決する", async () => {
+    const now = new Date().toISOString();
+    await db.insert(schema.groups).values({
+      id: "primary:group_001",
+      profileId: "primary",
+      mfGroupId: "group_001",
+      name: "Group A",
+      isCurrent: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(resolveGroupIds(db, "primary%3Agroup_001")).resolves.toEqual([
+      "primary:group_001",
+    ]);
+  });
+});
+
 describe("getAccountIdsForGroup", () => {
   it("グループに属するアカウントIDリストを返す", async () => {
     const now = new Date().toISOString();
@@ -182,5 +291,74 @@ describe("getAccountIdsForGroup", () => {
 
   it("グループにアカウントがない場合は空配列を返す", async () => {
     expect(await getAccountIdsForGroup(db, "nonexistent")).toEqual([]);
+  });
+
+  it("複数グループのアカウントを重複なく返す", async () => {
+    const now = new Date().toISOString();
+    await createTestProfile(db, "secondary");
+    await db.insert(schema.groups).values([
+      {
+        id: "primary:global",
+        profileId: "primary",
+        mfGroupId: "0",
+        name: "Primary Global",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "secondary:global",
+        profileId: "secondary",
+        mfGroupId: "0",
+        name: "Secondary Global",
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    const primaryAccount = await db
+      .insert(schema.accounts)
+      .values({
+        profileId: "primary",
+        mfId: "primary-account",
+        name: "Account A",
+        type: "bank",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const secondaryAccount = await db
+      .insert(schema.accounts)
+      .values({
+        profileId: "secondary",
+        mfId: "secondary-account",
+        name: "Account B",
+        type: "bank",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    await db.insert(schema.groupAccounts).values([
+      {
+        profileId: "primary",
+        groupId: "primary:global",
+        accountId: primaryAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        profileId: "secondary",
+        groupId: "secondary:global",
+        accountId: secondaryAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    await expect(
+      getAccountIdsForGroups(db, ["primary:global", "secondary:global"]),
+    ).resolves.toEqual([primaryAccount.id, secondaryAccount.id]);
   });
 });

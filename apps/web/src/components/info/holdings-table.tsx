@@ -69,6 +69,7 @@ export async function HoldingsTable({
         id: number;
         name: string;
         accountName: string | null;
+        profileName?: string | null;
         institution: string | null;
         categoryName: string | null;
         amount: number | null;
@@ -92,6 +93,7 @@ export async function HoldingsTable({
       id: holding.id,
       name: holding.name,
       accountName: holding.accountName,
+      profileName: holding.profileName,
       institution: holding.institution,
       categoryName: holding.categoryName,
       amount: holding.amount,

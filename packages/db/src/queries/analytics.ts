@@ -13,7 +13,7 @@ import {
   getLatestTotalAssets,
   getAssetBreakdownByCategory,
 } from "../index";
-import { resolveGroupId } from "../shared/group-filter";
+import { resolveGroupIds } from "../shared/group-filter";
 
 // ============================================================================
 // 型定義
@@ -139,14 +139,14 @@ interface CollectedData {
   }>;
 }
 
-async function collectData(groupId: string, db: Db): Promise<CollectedData> {
+async function collectData(scopeId: string | undefined, db: Db): Promise<CollectedData> {
   const dateThreshold = getDateThreshold();
 
-  const holdingsRaw = await getHoldingsWithLatestValues(groupId, db);
-  const transactionsRaw = await getTransactions({ groupId }, db);
-  const assetHistoryRaw = await getAssetHistory({ groupId }, db);
-  const totalAssets = (await getLatestTotalAssets(groupId, db)) ?? 0;
-  const categoryBreakdown = await getAssetBreakdownByCategory(groupId, db);
+  const holdingsRaw = await getHoldingsWithLatestValues(scopeId, db);
+  const transactionsRaw = await getTransactions({ groupId: scopeId }, db);
+  const assetHistoryRaw = await getAssetHistory({ groupId: scopeId }, db);
+  const totalAssets = (await getLatestTotalAssets(scopeId, db)) ?? 0;
+  const categoryBreakdown = await getAssetBreakdownByCategory(scopeId, db);
 
   const liquidAssets = categoryBreakdown
     .filter((c) => isLiquidAssetCategory(c.category))
@@ -575,10 +575,10 @@ export async function getFinancialMetrics(
   groupIdParam?: string,
   db: Db = getDb(),
 ): Promise<AnalyticsMetrics | null> {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return null;
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return null;
 
-  const data = await collectData(groupId, db);
+  const data = await collectData(groupIdParam, db);
   return computeMetrics(data);
 }
 
@@ -586,10 +586,10 @@ export async function getLatestAnalytics(
   groupIdParam?: string,
   db: Db = getDb(),
 ): Promise<AnalyticsReport | null> {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return null;
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return null;
 
-  const data = await collectData(groupId, db);
+  const data = await collectData(groupIdParam, db);
   // 生データが全くない場合はnull
   if (
     data.totalAssets === 0 &&
@@ -604,13 +604,16 @@ export async function getLatestAnalytics(
   const metrics = computeMetrics(data);
 
   // DB から LLM insights を取得
-  const dbReport = await db
-    .select()
-    .from(schema.analyticsReports)
-    .where(eq(schema.analyticsReports.groupId, groupId))
-    .orderBy(desc(schema.analyticsReports.date))
-    .limit(1)
-    .get();
+  const dbReport =
+    groupIds.length === 1
+      ? await db
+          .select()
+          .from(schema.analyticsReports)
+          .where(eq(schema.analyticsReports.groupId, groupIds[0]))
+          .orderBy(desc(schema.analyticsReports.date))
+          .limit(1)
+          .get()
+      : undefined;
 
   const insights: AnalyticsInsights | null = dbReport
     ? {

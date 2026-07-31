@@ -20,6 +20,7 @@ interface HoldingItem {
   id: number;
   name: string;
   accountName: string | null;
+  profileName?: string | null;
   institution: string | null;
   categoryName: string | null;
   amount: number | null;
@@ -155,7 +156,7 @@ function CategoryCard({
   const colors = getChartColorArray(items.length);
 
   const chartData = items.map((item, i) => ({
-    name: item.name,
+    name: item.profileName ? `${item.name}（${item.profileName}）` : item.name,
     value: item.amount || 0,
     color: colors[i],
   }));
@@ -283,7 +284,14 @@ function HoldingRow({
             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
             style={{ backgroundColor: color }}
           />
-          <span className="font-medium flex-1 min-w-0 truncate">{holding.name}</span>
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {holding.name}
+            {holding.profileName && (
+              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                （{holding.profileName}）
+              </span>
+            )}
+          </span>
           <div className="flex items-center gap-1 shrink-0">
             <div className="text-right tabular-nums">
               {holding.amount ? (
@@ -313,7 +321,14 @@ function HoldingRow({
             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
             style={{ backgroundColor: color }}
           />
-          <span className="font-medium flex-1 min-w-0 truncate">{holding.name}</span>
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {holding.name}
+            {holding.profileName && (
+              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                （{holding.profileName}）
+              </span>
+            )}
+          </span>
           <div className="text-right shrink-0 tabular-nums">
             {holding.amount ? (
               <AmountDisplay

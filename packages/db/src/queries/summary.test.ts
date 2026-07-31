@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
+import { createProfileScopeId } from "../shared/group-filter";
 import {
   createTestDb,
   resetTestDb,
@@ -41,12 +42,16 @@ beforeEach(async () => {
   await createTestGroup(db);
 });
 
-async function createTestAccount(name: string): Promise<number> {
+async function createTestAccount(
+  name: string,
+  profileId = "primary",
+  groupId = TEST_GROUP_ID,
+): Promise<number> {
   const now = new Date().toISOString();
   const account = await db
     .insert(schema.accounts)
     .values({
-      profileId: "primary",
+      profileId,
       mfId: `mf_${name}`,
       name,
       type: "bank",
@@ -59,8 +64,8 @@ async function createTestAccount(name: string): Promise<number> {
   await db
     .insert(schema.groupAccounts)
     .values({
-      profileId: "primary",
-      groupId: TEST_GROUP_ID,
+      profileId,
+      groupId,
       accountId: account.id,
       createdAt: now,
       updatedAt: now,
@@ -68,6 +73,29 @@ async function createTestAccount(name: string): Promise<number> {
     .run();
 
   return account.id;
+}
+
+async function createSecondaryProfileGroup() {
+  const now = new Date().toISOString();
+  const profileId = "secondary";
+  const groupId = `${profileId}:test_group_001`;
+  await db.insert(schema.moneyForwardProfiles).values({
+    id: profileId,
+    name: "Profile B",
+    enabled: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db.insert(schema.groups).values({
+    id: groupId,
+    profileId,
+    mfGroupId: "test_group_001",
+    name: "Group B",
+    isCurrent: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { profileId, groupId };
 }
 
 const GROUP_NONE_ID = "primary:0";
@@ -126,12 +154,13 @@ async function createTransaction(data: {
   subCategory?: string;
   transferTargetAccountId?: number;
   isExcludedFromCalculation?: boolean;
+  profileId?: string;
 }) {
   const now = new Date().toISOString();
   await db
     .insert(schema.transactions)
     .values({
-      profileId: "primary",
+      profileId: data.profileId ?? "primary",
       mfId: `tx_${Date.now()}_${Math.random()}`,
       date: data.date,
       accountId: data.accountId,
@@ -153,12 +182,13 @@ async function createSpendingTarget(
   categoryName: string,
   type: "fixed" | "variable",
   largeCategoryId: number,
+  groupId = TEST_GROUP_ID,
 ) {
   const now = new Date().toISOString();
   await db
     .insert(schema.spendingTargets)
     .values({
-      groupId: TEST_GROUP_ID,
+      groupId,
       categoryName,
       type,
       largeCategoryId,
@@ -878,6 +908,119 @@ describe("getAvailableMonths", () => {
     await resetTestDb(db);
     const result = await getAvailableMonths(undefined, db);
     expect(result).toEqual([]);
+  });
+});
+
+describe("複数profile scope", () => {
+  async function createTwoProfileTransactions() {
+    const secondary = await createSecondaryProfileGroup();
+    const primaryAccountId = await createTestAccount("Account A");
+    const secondaryAccountId = await createTestAccount(
+      "Account B",
+      secondary.profileId,
+      secondary.groupId,
+    );
+    await createTransaction({
+      accountId: primaryAccountId,
+      date: "2025-04-10",
+      amount: 100000,
+      type: "income",
+      category: "Income",
+    });
+    await createTransaction({
+      accountId: primaryAccountId,
+      date: "2025-04-11",
+      amount: 20000,
+      type: "expense",
+      category: "Housing",
+    });
+    await createTransaction({
+      accountId: secondaryAccountId,
+      date: "2025-03-10",
+      amount: 50000,
+      type: "income",
+      category: "Income",
+      profileId: secondary.profileId,
+    });
+    await createTransaction({
+      accountId: secondaryAccountId,
+      date: "2025-04-12",
+      amount: 30000,
+      type: "expense",
+      category: "Housing",
+      profileId: secondary.profileId,
+    });
+    return secondary;
+  }
+
+  it("未指定では収支・カテゴリ・available months・YTDを集約し、scopeごとに分離する", async () => {
+    const secondary = await createTwoProfileTransactions();
+
+    await expect(getMonthlySummaryByMonth("2025-04", undefined, db)).resolves.toMatchObject({
+      totalIncome: 100000,
+      totalExpense: 50000,
+      netIncome: 50000,
+    });
+    await expect(
+      getMonthlySummaryByMonth("2025-04", createProfileScopeId("primary"), db),
+    ).resolves.toMatchObject({ totalIncome: 100000, totalExpense: 20000 });
+    await expect(getMonthlySummaryByMonth("2025-04", secondary.groupId, db)).resolves.toMatchObject(
+      {
+        totalIncome: 0,
+        totalExpense: 30000,
+      },
+    );
+
+    const monthlySummaries = await getMonthlySummaries(undefined, db);
+    expect(monthlySummaries.find((item) => item.month === "2025-04")).toMatchObject({
+      totalIncome: 100000,
+      totalExpense: 50000,
+      netIncome: 50000,
+    });
+
+    const categories = await getMonthlyCategoryTotals("2025-04", undefined, db);
+    expect(categories.find((item) => item.category === "Housing")?.totalAmount).toBe(50000);
+
+    const months = await getAvailableMonths(undefined, db);
+    expect(months.at(-1)).toEqual({ month: "2025-03" });
+
+    await expect(getYearToDateSummary({ year: 2025 }, db)).resolves.toMatchObject({
+      totalIncome: 150000,
+      totalExpense: 50000,
+      balance: 100000,
+      monthCount: 2,
+    });
+    await expect(
+      getYearToDateSummary({ year: 2025, groupId: createProfileScopeId("secondary") }, db),
+    ).resolves.toMatchObject({
+      totalIncome: 50000,
+      totalExpense: 30000,
+      balance: 20000,
+      monthCount: 2,
+    });
+  });
+
+  it("profileごとのspending targetで分類してから全体を集約する", async () => {
+    const secondary = await createTwoProfileTransactions();
+    await createSpendingTarget("Housing", "fixed", 1, secondary.groupId);
+
+    const combined = await getExpenseByFixedVariable("2025-04", undefined, db);
+    expect(combined.fixed).toEqual({
+      total: 30000,
+      categories: [{ category: "Housing", amount: 30000 }],
+    });
+    expect(combined.variable).toEqual({
+      total: 20000,
+      categories: [{ category: "Housing", amount: 20000 }],
+    });
+
+    const primaryOnly = await getExpenseByFixedVariable(
+      "2025-04",
+      createProfileScopeId("primary"),
+      db,
+    );
+    expect(primaryOnly.fixed.total).toBe(0);
+    expect(primaryOnly.variable.total).toBe(20000);
   });
 });
 

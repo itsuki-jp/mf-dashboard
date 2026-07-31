@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
+import { createProfileScopeId } from "../shared/group-filter";
 import { createTestDb, resetTestDb, closeTestDb } from "../test-helpers";
 import { getTransactions, getTransactionsByMonth, getTransactionsByAccountId } from "./transaction";
 
@@ -35,12 +36,16 @@ beforeEach(async () => {
     .run();
 });
 
-async function createTestAccount(name: string): Promise<number> {
+async function createTestAccount(
+  name: string,
+  profileId = "primary",
+  groupId = TEST_GROUP_ID,
+): Promise<number> {
   const now = new Date().toISOString();
   const account = await db
     .insert(schema.accounts)
     .values({
-      profileId: "primary",
+      profileId,
       mfId: `mf_${name}`,
       name,
       type: "bank",
@@ -53,8 +58,8 @@ async function createTestAccount(name: string): Promise<number> {
   await db
     .insert(schema.groupAccounts)
     .values({
-      profileId: "primary",
-      groupId: TEST_GROUP_ID,
+      profileId,
+      groupId,
       accountId: account.id,
       createdAt: now,
       updatedAt: now,
@@ -64,6 +69,29 @@ async function createTestAccount(name: string): Promise<number> {
   return account.id;
 }
 
+async function createSecondaryProfileGroup() {
+  const now = new Date().toISOString();
+  const profileId = "secondary";
+  const groupId = `${profileId}:${TEST_MF_GROUP_ID}`;
+  await db.insert(schema.moneyForwardProfiles).values({
+    id: profileId,
+    name: "Profile B",
+    enabled: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db.insert(schema.groups).values({
+    profileId,
+    mfGroupId: TEST_MF_GROUP_ID,
+    id: groupId,
+    name: "Group B",
+    isCurrent: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { profileId, groupId };
+}
+
 async function createTransaction(data: {
   accountId: number;
   date: string;
@@ -71,12 +99,13 @@ async function createTransaction(data: {
   type: "income" | "expense" | "transfer";
   category?: string;
   transferTargetAccountId?: number;
+  profileId?: string;
 }) {
   const now = new Date().toISOString();
   await db
     .insert(schema.transactions)
     .values({
-      profileId: "primary",
+      profileId: data.profileId ?? "primary",
       mfId: `tx_${Date.now()}_${Math.random()}`,
       date: data.date,
       accountId: data.accountId,
@@ -133,6 +162,42 @@ describe("getTransactions", () => {
     await resetTestDb(db);
     expect(await getTransactions(undefined, db)).toEqual([]);
   });
+
+  it("未指定では全profileを集約し、profile scopeと明示groupでは分離する", async () => {
+    const secondary = await createSecondaryProfileGroup();
+    const primaryAccountId = await createTestAccount("Account A");
+    const secondaryAccountId = await createTestAccount(
+      "Account B",
+      secondary.profileId,
+      secondary.groupId,
+    );
+    await createTransaction({
+      accountId: primaryAccountId,
+      date: "2025-04-15",
+      amount: 1000,
+      type: "expense",
+    });
+    await createTransaction({
+      accountId: secondaryAccountId,
+      date: "2025-04-16",
+      amount: 2000,
+      type: "expense",
+      profileId: secondary.profileId,
+    });
+
+    expect((await getTransactions(undefined, db)).map((item) => item.accountName)).toEqual([
+      "Account B",
+      "Account A",
+    ]);
+    expect(
+      (await getTransactions({ groupId: createProfileScopeId("secondary") }, db)).map(
+        (item) => item.accountName,
+      ),
+    ).toEqual(["Account B"]);
+    expect(
+      (await getTransactions({ groupId: TEST_GROUP_ID }, db)).map((item) => item.accountName),
+    ).toEqual(["Account A"]);
+  });
 });
 
 describe("getTransactionsByMonth", () => {
@@ -164,6 +229,38 @@ describe("getTransactionsByMonth", () => {
     await createTransaction({ accountId, date: "2025-04-15", amount: 3000, type: "expense" });
 
     expect(await getTransactionsByMonth("2099-01", undefined, db)).toEqual([]);
+  });
+
+  it("未指定では全profileの対象月を集約する", async () => {
+    const secondary = await createSecondaryProfileGroup();
+    const primaryAccountId = await createTestAccount("Account A");
+    const secondaryAccountId = await createTestAccount(
+      "Account B",
+      secondary.profileId,
+      secondary.groupId,
+    );
+    await createTransaction({
+      accountId: primaryAccountId,
+      date: "2025-04-15",
+      amount: 1000,
+      type: "expense",
+    });
+    await createTransaction({
+      accountId: secondaryAccountId,
+      date: "2025-04-16",
+      amount: 2000,
+      type: "expense",
+      profileId: secondary.profileId,
+    });
+
+    expect(
+      (await getTransactionsByMonth("2025-04", undefined, db)).map((item) => item.amount),
+    ).toEqual([2000, 1000]);
+    expect(
+      (await getTransactionsByMonth("2025-04", createProfileScopeId("primary"), db)).map(
+        (item) => item.amount,
+      ),
+    ).toEqual([1000]);
   });
 
   describe("振替トランザクションの収入変換", () => {
@@ -234,5 +331,24 @@ describe("getTransactionsByAccountId", () => {
     await createTransaction({ accountId, date: "2025-04-15", amount: 3000, type: "expense" });
 
     expect(await getTransactionsByAccountId(9999, undefined, db)).toEqual([]);
+  });
+
+  it("profile scope外のアカウントは空配列を返す", async () => {
+    const secondary = await createSecondaryProfileGroup();
+    const primaryAccountId = await createTestAccount("Account A");
+    await createTransaction({
+      accountId: primaryAccountId,
+      date: "2025-04-15",
+      amount: 1000,
+      type: "expense",
+    });
+
+    expect(
+      await getTransactionsByAccountId(
+        primaryAccountId,
+        createProfileScopeId(secondary.profileId),
+        db,
+      ),
+    ).toEqual([]);
   });
 });

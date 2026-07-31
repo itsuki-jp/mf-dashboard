@@ -31,12 +31,16 @@ export const ErrorOnly: Story = {
     errorAccounts: [
       {
         id: 1,
+        profileId: "profile_a",
+        profileName: "Profile A",
         mfId: "account-1",
         name: "User Aの銀行口座",
         status: "error",
       },
       {
         id: 2,
+        profileId: "profile_b",
+        profileName: "Profile B",
         mfId: "account-2",
         name: "User Bのクレジットカード",
         status: "error",
@@ -52,6 +56,8 @@ export const UpdatingOnly: Story = {
     updatingAccounts: [
       {
         id: 3,
+        profileId: "profile_a",
+        profileName: "Profile A",
         mfId: "account-3",
         name: "User Cの証券口座",
         status: "updating",

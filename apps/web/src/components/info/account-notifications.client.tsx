@@ -6,6 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 interface Account {
   id: number;
+  profileId?: string;
+  profileName?: string;
   mfId: string;
   name: string;
   status: string;

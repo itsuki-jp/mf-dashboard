@@ -1,21 +1,50 @@
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, asc } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
-import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
+import { resolveGroupIds, getAccountIdsForGroups } from "../shared/group-filter";
 import { toAccountStatusType, type AccountStatusType } from "../types";
+
+export interface DashboardAccountListItem {
+  id: number;
+  profileId?: string;
+  profileName?: string;
+  mfId: string;
+  name: string;
+  type: string;
+  status: AccountStatusType;
+  lastUpdated: string | null;
+  totalAssets: number;
+  categoryId: number | null;
+  categoryName: string;
+  categoryDisplayOrder: number;
+}
+
+export interface DashboardAccountDetail {
+  id: number;
+  profileId?: string;
+  profileName?: string;
+  mfId: string;
+  name: string;
+  type: string;
+  status: AccountStatusType;
+  lastUpdated: string | null;
+  totalAssets: number;
+  errorMessage: string | null;
+  categoryName: string;
+}
 
 /**
  * グループの最終スクレイプ日時を取得
  */
 export async function getLatestUpdateDate(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return null;
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return null;
 
-  const group = await db
-    .select({ lastScrapedAt: schema.groups.lastScrapedAt })
+  const result = await db
+    .select({ lastScrapedAt: sql<string | null>`max(${schema.groups.lastScrapedAt})` })
     .from(schema.groups)
-    .where(eq(schema.groups.id, groupId))
+    .where(inArray(schema.groups.id, groupIds))
     .get();
-  return group?.lastScrapedAt ?? null;
+  return result?.lastScrapedAt ?? null;
 }
 
 /**
@@ -62,16 +91,21 @@ export function buildActiveAccountCondition(accountIds: number[]) {
  * グループ内のアカウント一覧（資産情報付き）を取得
  * 資産額は /accounts ページから取得した値を使用（accountStatuses.totalAssets）
  */
-export async function getAccountsWithAssets(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return [];
+export async function getAccountsWithAssets(
+  groupIdParam?: string,
+  db: Db = getDb(),
+): Promise<DashboardAccountListItem[]> {
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return [];
 
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0) return [];
 
   const results = await db
     .select({
       id: schema.accounts.id,
+      profileId: schema.accounts.profileId,
+      profileName: schema.moneyForwardProfiles.name,
       mfId: schema.accounts.mfId,
       name: schema.accounts.name,
       type: schema.accounts.type,
@@ -83,12 +117,17 @@ export async function getAccountsWithAssets(groupIdParam?: string, db: Db = getD
       categoryDisplayOrder: schema.institutionCategories.displayOrder,
     })
     .from(schema.accounts)
+    .innerJoin(
+      schema.moneyForwardProfiles,
+      eq(schema.moneyForwardProfiles.id, schema.accounts.profileId),
+    )
     .leftJoin(schema.accountStatuses, eq(schema.accountStatuses.accountId, schema.accounts.id))
     .leftJoin(
       schema.institutionCategories,
       eq(schema.institutionCategories.id, schema.accounts.categoryId),
     )
     .where(buildActiveAccountCondition(accountIds))
+    .orderBy(asc(schema.accounts.profileId), asc(schema.accounts.id))
     .all();
 
   return results.map((account) => normalizeAccount(account));
@@ -98,16 +137,17 @@ export async function getAccountsWithAssets(groupIdParam?: string, db: Db = getD
  * グループ内のアカウントのmfIdリストを取得（静的生成用）
  */
 export async function getAllAccountMfIds(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return [];
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return [];
 
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0) return [];
 
   const results = await db
     .select({ mfId: schema.accounts.mfId })
     .from(schema.accounts)
     .where(buildActiveAccountCondition(accountIds))
+    .orderBy(asc(schema.accounts.profileId), asc(schema.accounts.id))
     .all();
 
   return results.map((a) => a.mfId);
@@ -117,16 +157,22 @@ export async function getAllAccountMfIds(groupIdParam?: string, db: Db = getDb()
  * mfIdでアカウントを取得
  * グループに所属しないアカウントはnullを返す
  */
-export async function getAccountByMfId(mfId: string, groupIdParam?: string, db: Db = getDb()) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return null;
+export async function getAccountByMfId(
+  mfId: string,
+  groupIdParam?: string,
+  db: Db = getDb(),
+): Promise<DashboardAccountDetail | null> {
+  const groupIds = await resolveGroupIds(db, groupIdParam);
+  if (groupIds.length === 0) return null;
 
-  const accountIds = await getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroups(db, groupIds);
   if (accountIds.length === 0) return null;
 
-  const account = await db
+  const matchingAccounts = await db
     .select({
       id: schema.accounts.id,
+      profileId: schema.accounts.profileId,
+      profileName: schema.moneyForwardProfiles.name,
       mfId: schema.accounts.mfId,
       name: schema.accounts.name,
       type: schema.accounts.type,
@@ -137,18 +183,28 @@ export async function getAccountByMfId(mfId: string, groupIdParam?: string, db: 
       categoryName: schema.institutionCategories.name,
     })
     .from(schema.accounts)
+    .innerJoin(
+      schema.moneyForwardProfiles,
+      eq(schema.moneyForwardProfiles.id, schema.accounts.profileId),
+    )
     .leftJoin(schema.accountStatuses, eq(schema.accountStatuses.accountId, schema.accounts.id))
     .leftJoin(
       schema.institutionCategories,
       eq(schema.institutionCategories.id, schema.accounts.categoryId),
     )
     .where(and(eq(schema.accounts.mfId, mfId), inArray(schema.accounts.id, accountIds)))
-    .get();
+    .limit(2)
+    .all();
 
-  if (!account) return null;
+  // mfId is unique only within a profile. An unscoped detail URL must fail closed
+  // instead of showing an arbitrary profile when multiple profiles share the ID.
+  if (matchingAccounts.length !== 1) return null;
+  const [account] = matchingAccounts;
 
   return {
     id: account.id,
+    profileId: account.profileId,
+    profileName: account.profileName,
     mfId: account.mfId,
     name: account.name,
     type: account.type,
@@ -160,13 +216,13 @@ export async function getAccountByMfId(mfId: string, groupIdParam?: string, db: 
   };
 }
 
-type AccountWithCategory = Awaited<ReturnType<typeof getAccountsWithAssets>>[number];
-
 /**
  * アカウントをカテゴリでグループ化
  */
-export function groupAccountsByCategory(accounts: AccountWithCategory[]) {
-  const grouped = new Map<string, AccountWithCategory[]>();
+export function groupAccountsByCategory<
+  T extends { categoryName: string; categoryDisplayOrder: number; totalAssets: number },
+>(accounts: T[]) {
+  const grouped = new Map<string, T[]>();
 
   for (const account of accounts) {
     const categoryName = account.categoryName;
