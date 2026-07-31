@@ -1,4 +1,10 @@
-import { getAllGroups, getDashboardProfiles, isDatabaseAvailable } from "@mf-dashboard/db";
+import {
+  getAllGroups,
+  getDashboardProfiles,
+  getDb,
+  isDatabaseAvailable,
+  resolveGroupIds,
+} from "@mf-dashboard/db";
 import { createProfileScopeId, parseProfileScopeId } from "@mf-dashboard/db/profile-scope";
 import { notFound } from "next/navigation";
 
@@ -15,12 +21,11 @@ export async function generateStaticParams() {
 
 export default async function GroupLayout({ children, params }: LayoutProps<"/[groupId]">) {
   const { groupId } = await params;
-  const groups = await getAllGroups();
   const profileId = parseProfileScopeId(groupId);
   const profiles = profileId ? await getDashboardProfiles() : [];
   const validScope = profileId
     ? profiles.some((profile) => profile.id === profileId)
-    : groups.some((group) => group.id === groupId);
+    : (await resolveGroupIds(getDb(), groupId)).length === 1;
 
   if (!validScope) {
     notFound();

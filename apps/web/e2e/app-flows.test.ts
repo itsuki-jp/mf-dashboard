@@ -211,14 +211,14 @@ test.describe("App flows", () => {
     await expect(page.getByText("エラー: 1件")).toBeVisible();
 
     await page.getByRole("link", { name: /三井住友銀行/ }).click();
-    await expectLocation(page, "/accounts/demo_000001");
+    await expectLocation(page, `${DEMO_PROFILE_SCOPE}/accounts/demo_000001`);
     await expectHeading(page, "三井住友銀行");
     await expect(page.getByText("普通預金").first()).toBeVisible();
     await expect(page.getByText("詳細一覧").first()).toBeVisible();
 
     await page.goto("/accounts");
     await page.getByRole("link", { name: /三井住友カード\(NL\)/ }).click();
-    await expectLocation(page, "/accounts/demo_000007");
+    await expectLocation(page, `${DEMO_PROFILE_SCOPE}/accounts/demo_000007`);
     await expectHeading(page, "三井住友カード(NL)");
     await expect(page.getByText("金融機関のメンテナンス中")).toBeVisible();
   });
@@ -227,7 +227,7 @@ test.describe("App flows", () => {
     await page.goto(`${INVESTMENT_GROUP_SCOPE}/accounts`);
     await expectHeading(page, "連携サービス一覧");
 
-    await page.getByRole("link", { name: /^SBI証券 自動連携/ }).click();
+    await page.getByRole("link", { name: /^SBI証券 Demo 自動連携/ }).click();
     await expectLocation(page, `${INVESTMENT_GROUP_SCOPE}/accounts/demo_000005`);
     await expectHeading(page, "SBI証券");
     await expect(page.getByRole("combobox", { name: "グループを選択" })).toContainText("投資");

@@ -204,6 +204,23 @@ describe("resolveGroupIds", () => {
 
     await expect(resolveGroupIds(db, "shared")).resolves.toEqual([]);
   });
+
+  it("URL encodeされた内部group IDを解決する", async () => {
+    const now = new Date().toISOString();
+    await db.insert(schema.groups).values({
+      id: "primary:group_001",
+      profileId: "primary",
+      mfGroupId: "group_001",
+      name: "Group A",
+      isCurrent: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(resolveGroupIds(db, "primary%3Agroup_001")).resolves.toEqual([
+      "primary:group_001",
+    ]);
+  });
 });
 
 describe("getAccountIdsForGroup", () => {

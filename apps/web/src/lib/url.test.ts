@@ -77,6 +77,12 @@ describe("extractPagePath", () => {
   it("encodes profile-scoped internal group IDs", () => {
     expect(buildGroupPath("profile_a:0", "cf")).toBe("/profile_a%3A0/cf");
   });
+
+  it("does not double-encode a route parameter", () => {
+    expect(buildGroupPath("profile_a%3A0", "accounts/account-a")).toBe(
+      "/profile_a%3A0/accounts/account-a",
+    );
+  });
 });
 
 describe("buildGroupPath", () => {

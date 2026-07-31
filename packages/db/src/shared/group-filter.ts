@@ -4,6 +4,14 @@ import { schema } from "../index";
 import { parseProfileScopeId } from "../profile-scope";
 export { createProfileScopeId, parseProfileScopeId, PROFILE_SCOPE_PREFIX } from "../profile-scope";
 
+function decodeScopeId(scopeId: string): string {
+  try {
+    return decodeURIComponent(scopeId);
+  } catch {
+    return scopeId;
+  }
+}
+
 /** 現在のグループID（isCurrent=true）を取得 */
 export async function getDefaultGroupId(db: Db): Promise<string | null> {
   const currentGroup = await db
@@ -31,9 +39,10 @@ export async function resolveGroupId(db: Db, groupId?: string): Promise<string |
  * mfGroupIdだけの指定が複数profileへ一致する場合は、混線を避けるためfail closedする。
  */
 export async function resolveGroupIds(db: Db, scopeId?: string): Promise<string[]> {
-  const profileId = scopeId ? parseProfileScopeId(scopeId) : null;
+  const normalizedScopeId = scopeId ? decodeScopeId(scopeId) : undefined;
+  const profileId = normalizedScopeId ? parseProfileScopeId(normalizedScopeId) : null;
 
-  if (!scopeId || profileId) {
+  if (!normalizedScopeId || profileId) {
     const currentGroups = await db
       .select({ id: schema.groups.id })
       .from(schema.groups)
@@ -62,7 +71,7 @@ export async function resolveGroupIds(db: Db, scopeId?: string): Promise<string[
     )
     .where(
       and(
-        or(eq(schema.groups.id, scopeId), eq(schema.groups.mfGroupId, scopeId)),
+        or(eq(schema.groups.id, normalizedScopeId), eq(schema.groups.mfGroupId, normalizedScopeId)),
         eq(schema.moneyForwardProfiles.enabled, true),
       ),
     )

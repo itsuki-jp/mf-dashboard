@@ -33,7 +33,13 @@ export function extractGroupIdFromPath(pathname: string): string | null {
 
 export function buildGroupPath(groupId: string | null | undefined, path: string): string {
   if (groupId) {
-    const encodedGroupId = encodeURIComponent(groupId);
+    let normalizedGroupId = groupId;
+    try {
+      normalizedGroupId = decodeURIComponent(groupId);
+    } catch {
+      // Keep malformed percent sequences as literal group ID characters.
+    }
+    const encodedGroupId = encodeURIComponent(normalizedGroupId);
     return path ? `/${encodedGroupId}/${path}` : `/${encodedGroupId}`;
   }
   return path ? `/${path}` : "/";
