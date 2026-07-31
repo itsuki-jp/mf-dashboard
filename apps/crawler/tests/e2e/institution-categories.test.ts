@@ -19,6 +19,7 @@ describe("scrapeInstitutionCategories", () => {
   test("実HTMLの口座一覧構造からカテゴリを取得できる", async () => {
     await withNewPage(context, async (page) => {
       const categoryMap = await scrapeInstitutionCategories(page);
+      const noServiceCount = await page.locator(".heading-no-service, .no-service").count();
       const structure = await page.locator(".facilities.accounts-list").evaluateAll((lists) => {
         let accountCount = 0;
         let categoryHeadingCount = 0;
@@ -59,7 +60,12 @@ describe("scrapeInstitutionCategories", () => {
         };
       });
 
-      expect(structure.listCount).toBeGreaterThan(0);
+      if (structure.listCount === 0) {
+        expect(noServiceCount).toBeGreaterThan(0);
+        expect(categoryMap.size).toBe(0);
+        return;
+      }
+
       expect(structure.accountCount).toBeGreaterThan(0);
       expect(structure.categoryHeadingCount).toBeGreaterThan(0);
       expect(structure.extractableLinkCount).toBeGreaterThan(0);

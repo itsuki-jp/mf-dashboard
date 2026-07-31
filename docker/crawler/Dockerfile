@@ -61,8 +61,10 @@ RUN package_manager=$(node -p "require('./package.json').packageManager") \
 
 COPY . .
 
-RUN mkdir -p /app/data /app/crawler-state \
+RUN mkdir -p /app/data /app/crawler-state /app/apps/crawler/debug \
+    && chown -R pwuser:pwuser /app/apps/crawler/debug \
     && chmod 1777 /app/crawler-state \
+    && chmod 0755 /app/apps/crawler/debug \
     && chmod 0755 /app/docker/crawler/entrypoint.sh
 USER pwuser
 

@@ -50,9 +50,12 @@ describe("scrapeInstitutionCategories", () => {
   test("必要な口座一覧のDOMを待ってからカテゴリーを抽出する", async () => {
     const waitFor = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
     const first = vi.fn<() => { waitFor: typeof waitFor }>().mockReturnValue({ waitFor });
+    const count = vi.fn<() => Promise<number>>().mockResolvedValue(1);
     const locator = vi
-      .fn<(selector: string) => { first: typeof first }>()
-      .mockReturnValue({ first });
+      .fn<(selector: string) => { count?: typeof count; first?: typeof first }>()
+      .mockImplementation((selector) =>
+        selector === ".facilities.accounts-list" ? { count } : { first },
+      );
     const goto = vi.fn<() => Promise<null>>().mockResolvedValue(null);
     const evaluate = vi.fn<() => Promise<InstitutionCategoryEntry[][]>>().mockResolvedValue([
       [
@@ -65,10 +68,33 @@ describe("scrapeInstitutionCategories", () => {
     const result = await scrapeInstitutionCategories(mockPage);
 
     expect(goto).toHaveBeenCalledWith(mfUrls.home, { waitUntil: "domcontentloaded" });
-    expect(locator).toHaveBeenCalledWith(".facilities.accounts-list");
+    expect(locator).toHaveBeenCalledWith(
+      ".facilities.accounts-list, .heading-no-service, .no-service",
+    );
     expect(first).toHaveBeenCalledOnce();
     expect(waitFor).toHaveBeenCalledWith({ state: "attached" });
     expect(evaluate).toHaveBeenCalledOnce();
     expect(result).toEqual(new Map([["account-a", "Category A"]]));
+  });
+
+  test("連携サービスなしが明示されていれば空のカテゴリーmapを返す", async () => {
+    const waitFor = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const first = vi.fn<() => { waitFor: typeof waitFor }>().mockReturnValue({ waitFor });
+    const count = vi.fn<() => Promise<number>>().mockResolvedValue(0);
+    const locator = vi.fn((selector: string) => {
+      if (selector === ".facilities.accounts-list") return { count };
+      return { first };
+    });
+    const goto = vi.fn<() => Promise<null>>().mockResolvedValue(null);
+    const evaluate = vi.fn();
+    const mockPage = { evaluate, goto, locator } as unknown as Page;
+
+    await expect(scrapeInstitutionCategories(mockPage)).resolves.toEqual(new Map());
+
+    expect(locator).toHaveBeenCalledWith(
+      ".facilities.accounts-list, .heading-no-service, .no-service",
+    );
+    expect(count).toHaveBeenCalledOnce();
+    expect(evaluate).not.toHaveBeenCalled();
   });
 });

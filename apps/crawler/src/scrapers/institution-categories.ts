@@ -70,7 +70,15 @@ export async function scrapeInstitutionCategories(page: Page): Promise<Map<strin
   debug("Scraping institution categories from top page...");
 
   await page.goto(mfUrls.home, { waitUntil: "domcontentloaded" });
-  await page.locator(".facilities.accounts-list").first().waitFor({ state: "attached" });
+  await page
+    .locator(".facilities.accounts-list, .heading-no-service, .no-service")
+    .first()
+    .waitFor({ state: "attached" });
+
+  if ((await page.locator(".facilities.accounts-list").count()) === 0) {
+    debug("  - No linked account list is present");
+    return new Map();
+  }
 
   const entries = await page.evaluate(extractInstitutionCategoryEntries);
   const categoryData = associateInstitutionCategories(entries);
