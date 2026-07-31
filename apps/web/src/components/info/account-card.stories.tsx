@@ -19,6 +19,8 @@ export const Default: Story = {
     status: "ok",
     lastUpdated: "2025-04-26T10:30:00",
     totalAssets: 3456789,
+    currentMonthExpense: 0,
+    categoryName: "銀行",
   },
 };
 
@@ -30,6 +32,8 @@ export const ErrorStatus: Story = {
     status: "error",
     lastUpdated: "2025-04-26T10:30:00",
     totalAssets: 1234567,
+    currentMonthExpense: 0,
+    categoryName: "証券",
   },
 };
 
@@ -40,7 +44,9 @@ export const UpdatingStatus: Story = {
     type: "カード",
     status: "updating",
     lastUpdated: "2025-04-26T10:30:00",
-    totalAssets: 45678,
+    totalAssets: 0,
+    currentMonthExpense: 12345,
+    categoryName: "カード",
   },
 };
 
@@ -52,6 +58,8 @@ export const Manual: Story = {
     status: "unknown",
     lastUpdated: null,
     totalAssets: 100000,
+    currentMonthExpense: 0,
+    categoryName: "銀行",
   },
 };
 
@@ -63,5 +71,7 @@ export const UnknownId: Story = {
     status: "ok",
     lastUpdated: null,
     totalAssets: 0,
+    currentMonthExpense: 0,
+    categoryName: "その他",
   },
 };
