@@ -60,16 +60,22 @@ describe("scrapeInstitutionCategories", () => {
         };
       });
 
-      if (structure.listCount === 0) {
-        expect(noServiceCount).toBeGreaterThan(0);
-        expect(categoryMap.size).toBe(0);
-        return;
-      }
-
-      expect(structure.accountCount).toBeGreaterThan(0);
-      expect(structure.categoryHeadingCount).toBeGreaterThan(0);
-      expect(structure.extractableLinkCount).toBeGreaterThan(0);
-      expect(categoryMap.size).toBe(structure.extractableAccountCount);
+      const hasAccountList = structure.listCount > 0;
+      expect({
+        accountStructureValid:
+          !hasAccountList ||
+          (structure.accountCount > 0 &&
+            structure.categoryHeadingCount > 0 &&
+            structure.extractableLinkCount > 0),
+        categoryMapValid: hasAccountList
+          ? categoryMap.size === structure.extractableAccountCount
+          : categoryMap.size === 0,
+        emptyStructureValid: hasAccountList || noServiceCount > 0,
+      }).toEqual({
+        accountStructureValid: true,
+        categoryMapValid: true,
+        emptyStructureValid: true,
+      });
     });
   });
 });

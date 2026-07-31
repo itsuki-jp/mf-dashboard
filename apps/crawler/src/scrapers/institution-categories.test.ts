@@ -81,12 +81,14 @@ describe("scrapeInstitutionCategories", () => {
     const waitFor = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
     const first = vi.fn<() => { waitFor: typeof waitFor }>().mockReturnValue({ waitFor });
     const count = vi.fn<() => Promise<number>>().mockResolvedValue(0);
-    const locator = vi.fn((selector: string) => {
-      if (selector === ".facilities.accounts-list") return { count };
-      return { first };
-    });
+    const locator = vi
+      .fn<(selector: string) => { count?: typeof count; first?: typeof first }>()
+      .mockImplementation((selector) => {
+        if (selector === ".facilities.accounts-list") return { count };
+        return { first };
+      });
     const goto = vi.fn<() => Promise<null>>().mockResolvedValue(null);
-    const evaluate = vi.fn();
+    const evaluate = vi.fn<() => Promise<InstitutionCategoryEntry[][]>>();
     const mockPage = { evaluate, goto, locator } as unknown as Page;
 
     await expect(scrapeInstitutionCategories(mockPage)).resolves.toEqual(new Map());
