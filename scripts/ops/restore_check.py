@@ -45,14 +45,29 @@ MAX_MEMBER_SIZES = {
 }
 
 
+def _gpg_path(path: Path) -> str:
+    """Format paths for the selected Windows GnuPG implementation."""
+
+    executable = shutil.which("gpg")
+    resolved = path.resolve()
+    if (
+        os.name == "nt"
+        and executable is not None
+        and "/git/usr/bin/" in Path(executable).resolve().as_posix().lower()
+    ):
+        posix_path = resolved.as_posix()
+        return f"/{posix_path[0].lower()}{posix_path[2:]}"
+    return str(resolved)
+
+
 def decrypt_with_gpg(source: Path, destination: Path, identity_path: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="mf-dashboard-gpg-") as temporary_home:
         home = Path(temporary_home)
         os.chmod(home, 0o700)
-        base_command = ["gpg", "--batch", "--no-options", "--homedir", str(home)]
+        base_command = ["gpg", "--batch", "--no-options", "--homedir", _gpg_path(home)]
         try:
             subprocess.run(
-                [*base_command, "--quiet", "--import", str(identity_path)],
+                [*base_command, "--quiet", "--import", _gpg_path(identity_path)],
                 check=True,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
@@ -70,15 +85,14 @@ def decrypt_with_gpg(source: Path, destination: Path, identity_path: Path) -> No
                     "--max-output",
                     str(MAX_DECRYPTED_BACKUP_BYTES),
                     "--output",
-                    str(destination),
+                    _gpg_path(destination),
                     "--decrypt",
-                    str(source),
+                    _gpg_path(source),
                 ],
                 check=True,
-                input=f"{passphrase}\n",
+                input=f"{passphrase}\n".encode("utf-8"),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                text=True,
             )
         except (FileNotFoundError, subprocess.CalledProcessError) as error:
             raise RestoreError("GnuPG backup decryption failed") from error
