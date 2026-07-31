@@ -140,5 +140,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
   }
 
-  return proxyCrawlerRequest("/runs", { method: "POST" });
+  const body = await request.text();
+  return proxyCrawlerRequest("/runs", {
+    method: "POST",
+    body: body || undefined,
+    headers: body ? { "content-type": "application/json" } : undefined,
+  });
 }

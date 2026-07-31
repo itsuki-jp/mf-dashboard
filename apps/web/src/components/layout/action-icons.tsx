@@ -25,13 +25,26 @@ interface ActionIconsProps {
   variant: "header" | "sidebar";
   notifications?: ReactNode;
   lastScrapedAt?: string | null;
+  profiles?: RefreshProfileOption[];
+  selectedProfileId?: string | null;
 }
 
 interface CrawlerRefreshButtonState extends CrawlerRefreshStatus {
   isPending: boolean;
 }
 
-export function ActionIcons({ variant, notifications, lastScrapedAt }: ActionIconsProps) {
+interface RefreshProfileOption {
+  id: string;
+  name: string;
+}
+
+export function ActionIcons({
+  variant,
+  notifications,
+  lastScrapedAt,
+  profiles = [],
+  selectedProfileId = null,
+}: ActionIconsProps) {
   const iconSize = variant === "header" ? "h-4.5 w-4.5" : "h-5 w-5";
 
   if (variant === "sidebar") {
@@ -45,7 +58,11 @@ export function ActionIcons({ variant, notifications, lastScrapedAt }: ActionIco
   return (
     <div className="flex items-center gap-1">
       <LastUpdatedAt lastScrapedAt={lastScrapedAt ?? null} />
-      <RefreshControl iconSize={iconSize} />
+      <RefreshControl
+        iconSize={iconSize}
+        profiles={profiles}
+        selectedProfileId={selectedProfileId}
+      />
       {notifications}
       <HomeButton iconSize={iconSize} />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
@@ -53,7 +70,15 @@ export function ActionIcons({ variant, notifications, lastScrapedAt }: ActionIco
   );
 }
 
-function RefreshControl({ iconSize }: { iconSize: string }) {
+function RefreshControl({
+  iconSize,
+  profiles,
+  selectedProfileId,
+}: {
+  iconSize: string;
+  profiles: RefreshProfileOption[];
+  selectedProfileId: string | null;
+}) {
   const router = useRouter();
   const wasRunningRef = useRef(false);
   const startRefreshInFlightRef = useRef(false);
@@ -115,7 +140,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     };
   }, [applyStatus]);
 
-  async function startRefresh() {
+  async function startRefresh(profileId?: string) {
     if (!state.available || state.isPending || startRefreshInFlightRef.current) {
       return;
     }
@@ -135,7 +160,16 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     }));
 
     try {
-      const res = await fetch(withBasePath("/api/crawler/refresh/"), { method: "POST" });
+      const res = await fetch(
+        withBasePath("/api/crawler/refresh/"),
+        profileId
+          ? {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ profileId }),
+            }
+          : { method: "POST" },
+      );
       const body: unknown = await res.json().catch(() => null);
 
       if (!res.ok && res.status !== 409) {
@@ -176,7 +210,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
   const isDisabled = state.isPending || !state.available;
 
   function handlePopoverOpenChange(open: boolean) {
-    if (!open || showsTimeline) {
+    if (!open || showsTimeline || profiles.length > 0) {
       setPopoverOpen(open);
       return;
     }
@@ -197,7 +231,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
 
   return (
     <>
-      <Popover open={popoverOpen && showsTimeline} onOpenChange={handlePopoverOpenChange}>
+      <Popover open={popoverOpen} onOpenChange={handlePopoverOpenChange}>
         <PopoverTrigger>
           <IconButton
             icon={
@@ -219,14 +253,64 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
           />
         </PopoverTrigger>
         <PopoverContent
-          ariaLabel={isFailed ? "同期失敗の詳細" : "同期タイムライン"}
+          ariaLabel={isFailed ? "同期失敗の詳細" : showsTimeline ? "同期タイムライン" : "更新対象"}
           align="end"
-          className="h-[min(32rem,calc(100dvh-2rem))] w-[calc(100vw-2rem)] max-w-sm overflow-y-auto"
+          className={
+            showsTimeline
+              ? "h-[min(32rem,calc(100dvh-2rem))] w-[calc(100vw-2rem)] max-w-sm overflow-y-auto"
+              : "w-[calc(100vw-2rem)] max-w-sm"
+          }
         >
-          <SyncTimelinePopover state={state} onRetry={() => void startRefresh()} />
+          {showsTimeline ? (
+            <SyncTimelinePopover state={state} onRetry={() => void startRefresh()} />
+          ) : (
+            <RefreshSelectionPopover
+              profiles={profiles}
+              selectedProfileId={selectedProfileId}
+              onSelect={(profileId) => void startRefresh(profileId)}
+            />
+          )}
         </PopoverContent>
       </Popover>
     </>
+  );
+}
+
+function RefreshSelectionPopover({
+  profiles,
+  selectedProfileId,
+  onSelect,
+}: {
+  profiles: RefreshProfileOption[];
+  selectedProfileId: string | null;
+  onSelect: (profileId?: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="font-semibold">更新対象</p>
+        <p className="text-sm text-muted-foreground">
+          同期するMoney Forwardプロフィールを選択します。
+        </p>
+      </div>
+      <div className="grid gap-2">
+        <Button
+          variant={selectedProfileId === null ? "default" : "outline"}
+          onClick={() => onSelect()}
+        >
+          すべて更新
+        </Button>
+        {profiles.map((profile) => (
+          <Button
+            key={profile.id}
+            variant={profile.id === selectedProfileId ? "default" : "outline"}
+            onClick={() => onSelect(profile.id)}
+          >
+            {profile.name}だけ更新
+          </Button>
+        ))}
+      </div>
+    </div>
   );
 }
 

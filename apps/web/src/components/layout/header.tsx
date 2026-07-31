@@ -94,6 +94,8 @@ export function Header({ groups, profiles = [], defaultGroupId, notifications }:
         <ActionIcons
           variant="header"
           notifications={notifications}
+          profiles={profiles.map(({ id, name }) => ({ id, name }))}
+          selectedProfileId={selectedProfileId}
           lastScrapedAt={
             selectedGroup?.lastScrapedAt ??
             selectedProfile?.lastScrapedAt ??

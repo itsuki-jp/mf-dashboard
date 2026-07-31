@@ -191,6 +191,31 @@ describe("ActionIcons", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
+  it("offers all and profile-targeted refresh choices", async () => {
+    render(
+      <ActionIcons
+        variant="header"
+        profiles={[
+          { id: "primary", name: "Primary" },
+          { id: "secondary", name: "Secondary" },
+        ]}
+      />,
+    );
+    await emitStatus({ available: true, running: false });
+
+    fireEvent.click(await screen.findByRole("button", { name: "金融機関データを更新" }));
+    expect(screen.getByRole("button", { name: "すべて更新" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Secondaryだけ更新" }));
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ profileId: "secondary" }),
+      }),
+    );
+  });
+
   it("applies a terminal status received while starting a refresh", async () => {
     let resolvePost: ((response: Response) => void) | undefined;
     vi.mocked(global.fetch).mockReturnValueOnce(

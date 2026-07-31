@@ -14,14 +14,42 @@ import {
 } from "./crawler-run-lock.js";
 import { getCrawlerRunStatePath } from "./crawler-run-state.js";
 import { error, info } from "./logger.js";
+import { assertValidProfileId } from "./profile-config.js";
 
 const DEFAULT_PORT = 8766;
 const DEFAULT_HOST = "127.0.0.1";
 
 interface CrawlerTriggerServerOptions {
   getState?: () => Promise<CrawlerRunState>;
-  startRun?: () => Promise<CrawlerRunState>;
+  startRun?: (profileId?: string) => Promise<CrawlerRunState>;
   watchState?: (onChange: () => void, onError: (err: Error) => void) => Promise<() => void>;
+}
+
+const MAX_RUN_REQUEST_BYTES = 1_024;
+
+async function readRequestedProfileId(request: IncomingMessage): Promise<string | undefined> {
+  let body = "";
+  for await (const chunk of request) {
+    body += chunk.toString();
+    if (Buffer.byteLength(body) > MAX_RUN_REQUEST_BYTES) {
+      throw new Error("invalid profile selection");
+    }
+  }
+  if (!body.trim()) return undefined;
+
+  const value: unknown = JSON.parse(body);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1 ||
+    !("profileId" in value) ||
+    typeof value.profileId !== "string"
+  ) {
+    throw new Error("invalid profile selection");
+  }
+  assertValidProfileId(value.profileId);
+  return value.profileId;
 }
 
 type ProgressReporter = Awaited<ReturnType<typeof createCrawlerProgressReporter>>;
@@ -184,7 +212,7 @@ async function streamCrawlerState(
   }
 }
 
-export async function startCrawlerRun(): Promise<CrawlerRunState> {
+export async function startCrawlerRun(profileId?: string): Promise<CrawlerRunState> {
   const lock = await acquireCrawlerRunLock("manual");
   let progress: Awaited<ReturnType<typeof createCrawlerProgressReporter>>;
   try {
@@ -201,7 +229,7 @@ export async function startCrawlerRun(): Promise<CrawlerRunState> {
   void (async () => {
     try {
       const { runCrawler } = await import("./run.js");
-      await runCrawler(progress);
+      await runCrawler(progress, { profileId });
       await progress.finish("success");
     } catch (err) {
       await recordManualRunFailure(progress);
@@ -263,8 +291,16 @@ export function createCrawlerTriggerServer(options: CrawlerTriggerServerOptions 
           return;
         }
 
+        let profileId: string | undefined;
         try {
-          json(response, 202, await startRun());
+          profileId = await readRequestedProfileId(request);
+        } catch {
+          json(response, 400, { error: "invalid profile selection" });
+          return;
+        }
+
+        try {
+          json(response, 202, await startRun(profileId));
         } catch (err) {
           if (err instanceof CrawlerAlreadyRunningError) {
             json(response, 409, err.state);

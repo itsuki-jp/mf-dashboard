@@ -318,6 +318,69 @@ describe("runCrawler progress", () => {
     expect(labels).toContain("[secondary] MoneyForward に認証");
   });
 
+  test("指定したenabled profileだけを実行し、全profile metadataは同期する", async () => {
+    const profiles = [
+      {
+        id: "primary",
+        name: "Primary",
+        enabled: true,
+        usernameSecretId: "username-id",
+        passwordSecretId: "password-id",
+        totpSecretId: "totp-id",
+      },
+      {
+        id: "secondary",
+        name: "Secondary",
+        enabled: true,
+        usernameSecretId: "secondary-username-id",
+        passwordSecretId: "secondary-password-id",
+        totpSecretId: "secondary-totp-id",
+      },
+    ];
+    vi.mocked(runLoadPhase).mockResolvedValue({
+      crawler: {
+        skipRefresh: false,
+        cleanupGroups: false,
+        dbPath: "/tmp/demo.db",
+        dbExists: true,
+        scrapeMode: "month",
+        isHistoryMode: false,
+        isDebug: false,
+        isHeaded: false,
+      },
+      profiles,
+    });
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await runCrawler(progress, { profileId: "secondary" });
+
+    expect(synchronizeMoneyForwardProfiles).toHaveBeenCalledWith(expect.anything(), profiles);
+    expect(vi.mocked(runSetupPhase).mock.calls.map(([, profile]) => profile.id)).toEqual([
+      "secondary",
+    ]);
+    expect(progress.getState().timeline.map(({ label }) => label)).toContain(
+      "[secondary] MoneyForward に認証",
+    );
+  });
+
+  test("存在しないprofile指定はbrowser setup前に拒否する", async () => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await expect(runCrawler(progress, { profileId: "missing" })).rejects.toThrow(
+      "Requested Money Forward profile is not enabled",
+    );
+
+    expect(runSetupPhase).not.toHaveBeenCalled();
+  });
+
   test("先行profileが失敗しても後続profileを完了してから失敗を返す", async () => {
     const primaryFailure = new Error("primary database save failed");
     vi.mocked(runLoadPhase).mockResolvedValue({
