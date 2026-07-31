@@ -1,4 +1,5 @@
 import { closeDb, initDb, type Db } from "@mf-dashboard/db";
+import { getAccountMfIds } from "@mf-dashboard/db/repository/accounts";
 import {
   synchronizeMoneyForwardProfiles,
   updateMoneyForwardProfileScrapeStatus,
@@ -24,6 +25,7 @@ import {
   runCrawlerStep,
   type CrawlerProgressReporter,
 } from "./crawler-progress.js";
+import { resolveHistoryFetchPolicy } from "./history-policy.js";
 import { error, info, warn } from "./logger.js";
 import {
   createProfileCompletedStatus,
@@ -34,8 +36,9 @@ import {
 import { createGroupScope } from "./scrapers/group.js";
 import { notifyWebRefresh } from "./web-refresh.js";
 
-interface RunCrawlerOptions {
+export interface RunCrawlerOptions {
   profileId?: string;
+  history?: boolean;
 }
 
 export async function runCrawler(
@@ -63,7 +66,7 @@ export async function runCrawler(
   for (const profile of selectedProfiles) {
     const profileProgress = createProfileProgressReporter(progress, profile.id);
     try {
-      await runProfileCrawler(config, profile, profileProgress);
+      await runProfileCrawler(config, profile, profileProgress, options);
     } catch (err) {
       failures.push(err);
       warn(`Money Forward profile ${profile.id} failed; continuing with the next profile.`);
@@ -95,6 +98,7 @@ async function runProfileCrawler(
   config: Awaited<ReturnType<typeof runLoadPhase>>["crawler"],
   profile: Awaited<ReturnType<typeof runLoadPhase>>["profiles"][number],
   progress: CrawlerProgressReporter,
+  options: RunCrawlerOptions,
 ): Promise<void> {
   let runtime: CrawlerRuntime | null = null;
 
@@ -111,7 +115,24 @@ async function runProfileCrawler(
     );
 
     await using groupScope = await createGroupScope(activeRuntime.page);
+    const existingAccountMfIds = await getAccountMfIds(activeRuntime.db, profile.id);
     const scrapeResult = await runScrapePhase(activeRuntime.page, config, progress);
+    const historyPolicy = resolveHistoryFetchPolicy({
+      forceHistory: config.isHistoryMode || options.history === true,
+      existingAccountMfIds,
+      registeredAccountMfIds: scrapeResult.globalData.registeredAccounts.accounts.map(
+        ({ mfId }) => mfId,
+      ),
+    });
+    if (historyPolicy.newAccountCount > 0) {
+      info(
+        `Detected ${historyPolicy.newAccountCount} new account(s); fetching all available history.`,
+      );
+    }
+    const effectiveConfig = {
+      ...config,
+      isHistoryMode: historyPolicy.shouldFetchHistory,
+    };
     const cleanupResult = config.cleanupGroups
       ? buildCleanupGroupIds(scrapeResult.groupDataList)
       : null;
@@ -130,7 +151,7 @@ async function runProfileCrawler(
         activeRuntime.db,
         profile.id,
         activeRuntime.page,
-        config,
+        effectiveConfig,
         activeRuntime.categoryDecision,
         progress,
         async (historyMonths) => {

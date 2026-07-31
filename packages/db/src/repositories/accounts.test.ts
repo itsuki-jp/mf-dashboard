@@ -5,6 +5,7 @@ import { closeTestDb, createTestDb, createTestProfile, resetTestDb } from "../te
 import type { AccountStatus } from "../types";
 import {
   buildAccountIdMap,
+  getAccountMfIds,
   saveAccountStatus,
   updateAccountCategory,
   upsertAccount,
@@ -52,6 +53,33 @@ describe("upsertAccount", () => {
     const result = await db.select().from(schema.accounts).all();
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("更新銀行");
+  });
+});
+
+describe("getAccountMfIds", () => {
+  test("profile内の既存mfIdだけを返す", async () => {
+    await createTestProfile(db, "primary");
+    await createTestProfile(db, "secondary");
+    await upsertAccount(db, "primary", {
+      mfId: "account-a",
+      name: "Account A",
+      type: "自動連携",
+      status: "ok",
+      lastUpdated: "2026-07-01",
+      url: "",
+      totalAssets: 0,
+    });
+    await upsertAccount(db, "secondary", {
+      mfId: "account-b",
+      name: "Account B",
+      type: "自動連携",
+      status: "ok",
+      lastUpdated: "2026-07-01",
+      url: "",
+      totalAssets: 0,
+    });
+
+    await expect(getAccountMfIds(db, "primary")).resolves.toEqual(new Set(["account-a"]));
   });
 });
 

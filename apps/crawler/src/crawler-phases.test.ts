@@ -201,6 +201,7 @@ describe("loadCrawlerConfig", () => {
       DB_PATH: "/tmp/test.db",
       DEBUG: "true",
       HEADED: "true",
+      HISTORY_MAX_MONTHS: "480",
       SCRAPE_MODE: "history",
       SKIP_REFRESH: "true",
     };
@@ -213,6 +214,7 @@ describe("loadCrawlerConfig", () => {
     expect(config.dbExists).toBe(true);
     expect(config.scrapeMode).toBe("history");
     expect(config.isHistoryMode).toBe(true);
+    expect(config.historyMaxMonths).toBe(480);
     expect(config.isDebug).toBe(true);
     expect(config.isHeaded).toBe(true);
   });

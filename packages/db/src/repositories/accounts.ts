@@ -98,6 +98,16 @@ export async function buildAccountIdMap(
   return map;
 }
 
+export async function getAccountMfIds(db: DbExecutor, profileId: string): Promise<Set<string>> {
+  const accounts = await db
+    .select({ mfId: schema.accounts.mfId })
+    .from(schema.accounts)
+    .where(eq(schema.accounts.profileId, profileId))
+    .all();
+
+  return new Set(accounts.map(({ mfId }) => mfId));
+}
+
 /**
  * 複数アカウントの一括upsert
  */

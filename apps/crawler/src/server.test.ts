@@ -222,10 +222,29 @@ describe("crawler trigger server", () => {
     expect(startRun).toHaveBeenCalledWith("secondary");
   });
 
+  test("starts a full-history run for the requested profile", async () => {
+    const startRun = vi.fn<(profileId?: string, history?: boolean) => Promise<CrawlerRunState>>(
+      async () => runningState,
+    );
+    const baseUrl = await listen(createCrawlerTriggerServer({ startRun }));
+
+    const res = await fetch(`${baseUrl}/runs`, {
+      method: "POST",
+      headers: { ...authorizationHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ profileId: "primary", history: true }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(startRun).toHaveBeenCalledWith("primary", true);
+  });
+
   test.each([
     JSON.stringify({ profileId: "../primary" }),
+    JSON.stringify({ profileId: "" }),
     JSON.stringify({ profileId: 123 }),
     JSON.stringify({ unsupported: true }),
+    JSON.stringify({ profileId: "primary", history: "true" }),
+    JSON.stringify({ profileId: "primary", history: true, unsupported: true }),
     "{",
   ])("rejects an invalid profile selection: %s", async (body) => {
     const startRun = vi.fn<(profileId?: string) => Promise<CrawlerRunState>>(

@@ -140,7 +140,7 @@ function RefreshControl({
     };
   }, [applyStatus]);
 
-  async function startRefresh(profileId?: string) {
+  async function startRefresh(profileId?: string, history = false) {
     if (!state.available || state.isPending || startRefreshInFlightRef.current) {
       return;
     }
@@ -160,16 +160,20 @@ function RefreshControl({
     }));
 
     try {
-      const res = await fetch(
-        withBasePath("/api/crawler/refresh/"),
-        profileId
+      const requestBody = {
+        ...(profileId ? { profileId } : {}),
+        ...(history ? { history: true } : {}),
+      };
+      const hasRequestBody = Object.keys(requestBody).length > 0;
+      const res = await fetch(withBasePath("/api/crawler/refresh/"), {
+        method: "POST",
+        ...(hasRequestBody
           ? {
-              method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ profileId }),
+              body: JSON.stringify(requestBody),
             }
-          : { method: "POST" },
-      );
+          : {}),
+      });
       const body: unknown = await res.json().catch(() => null);
 
       if (!res.ok && res.status !== 409) {
@@ -267,7 +271,7 @@ function RefreshControl({
             <RefreshSelectionPopover
               profiles={profiles}
               selectedProfileId={selectedProfileId}
-              onSelect={(profileId) => void startRefresh(profileId)}
+              onSelect={(profileId, history) => void startRefresh(profileId, history)}
             />
           )}
         </PopoverContent>
@@ -283,7 +287,7 @@ function RefreshSelectionPopover({
 }: {
   profiles: RefreshProfileOption[];
   selectedProfileId: string | null;
-  onSelect: (profileId?: string) => void;
+  onSelect: (profileId?: string, history?: boolean) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -310,6 +314,21 @@ function RefreshSelectionPopover({
           </Button>
         ))}
       </div>
+      {profiles.length > 0 && (
+        <div className="border-t pt-3">
+          <p className="font-semibold">履歴の再取得</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Money Forwardで閲覧できる最古月まで取得します。通常更新より時間がかかります。
+          </p>
+          <div className="mt-3 grid gap-2">
+            {profiles.map((profile) => (
+              <Button key={profile.id} variant="outline" onClick={() => onSelect(profile.id, true)}>
+                {profile.name}の全期間を再取得
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

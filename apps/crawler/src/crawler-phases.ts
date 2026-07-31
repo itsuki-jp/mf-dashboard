@@ -28,7 +28,8 @@ import {
   type CrawlerProgressReporter,
 } from "./crawler-progress.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
-import { getHistoryMaxMonths, getHistoryMonth } from "./history-months.js";
+import { getHistoryMonth } from "./history-months.js";
+import { parseHistoryMaxMonths } from "./history-policy.js";
 import { runHooks } from "./hooks/runner.js";
 import { debug, error, info, log, phase, warn } from "./logger.js";
 import { sendFailureNotifications, sendSuccessNotifications } from "./notification.js";
@@ -53,6 +54,7 @@ export interface CrawlerConfig {
   dbExists: boolean;
   scrapeMode: string;
   isHistoryMode: boolean;
+  historyMaxMonths: number;
   isDebug: boolean;
   isHeaded: boolean;
 }
@@ -109,6 +111,7 @@ export function loadCrawlerConfig(
   const dbPath = env.DB_PATH || DEFAULT_DB_PATH;
   const dbExists = fileExists(dbPath);
   const scrapeMode = env.SCRAPE_MODE || (dbExists ? "month" : "history");
+  const historyMaxMonths = parseHistoryMaxMonths(env.HISTORY_MAX_MONTHS);
 
   return {
     skipRefresh,
@@ -117,6 +120,7 @@ export function loadCrawlerConfig(
     dbExists,
     scrapeMode,
     isHistoryMode: scrapeMode === "history",
+    historyMaxMonths,
     isDebug: env.DEBUG === "true",
     isHeaded: env.HEADED === "true",
   };
@@ -127,6 +131,7 @@ function logCrawlerOptions(config: CrawlerConfig): void {
   log(`SKIP_REFRESH:   ${config.skipRefresh}`);
   info(`CLEANUP_GROUPS: ${config.cleanupGroups}`);
   log(`SCRAPE_MODE:    ${config.scrapeMode} (DB exists: ${config.dbExists})`);
+  log(`HISTORY_MAX_MONTHS: ${config.historyMaxMonths}`);
   log(`DEBUG:          ${config.isDebug}`);
   log(`HEADED:         ${config.isHeaded}`);
 }
@@ -289,7 +294,9 @@ export async function runCashFlowHistoryPhase(
   db: Db,
   profileId: string,
   page: Page,
-  config: Pick<CrawlerConfig, "isHistoryMode">,
+  config: Pick<CrawlerConfig, "isHistoryMode"> & {
+    historyMaxMonths?: CrawlerConfig["historyMaxMonths"];
+  },
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
   progress?: CrawlerProgressReporter,
   publishHistory: (
@@ -308,7 +315,7 @@ export async function runCashFlowHistoryPhase(
   }
 
   const now = new Date();
-  const maxMonths = getHistoryMaxMonths(now);
+  const maxMonths = config.historyMaxMonths ?? parseHistoryMaxMonths(undefined);
 
   let monthsToFetch = 1;
   for (let i = 1; i < maxMonths; i++) {

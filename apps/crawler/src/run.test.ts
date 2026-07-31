@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { closeDb, initDb } from "@mf-dashboard/db";
+import { getAccountMfIds } from "@mf-dashboard/db/repository/accounts";
 import {
   synchronizeMoneyForwardProfiles,
   updateMoneyForwardProfileScrapeStatus,
@@ -32,6 +33,9 @@ vi.mock("@mf-dashboard/db/repository/profiles", () => ({
   synchronizeMoneyForwardProfiles: vi.fn<() => void>(),
   updateMoneyForwardProfileScrapeStatus: vi.fn<() => void>(),
 }));
+vi.mock("@mf-dashboard/db/repository/accounts", () => ({
+  getAccountMfIds: vi.fn<() => Promise<Set<string>>>(),
+}));
 vi.mock("./crawler-phases.js", () => ({
   handleCrawlerFailure: vi.fn<() => void>(),
   runAnalyticsPhase: vi.fn<() => void>(),
@@ -58,6 +62,7 @@ beforeEach(async () => {
     ),
   } as never);
   vi.mocked(synchronizeMoneyForwardProfiles).mockResolvedValue(undefined);
+  vi.mocked(getAccountMfIds).mockResolvedValue(new Set());
   vi.mocked(updateMoneyForwardProfileScrapeStatus).mockResolvedValue(undefined);
   vi.mocked(runLoadPhase).mockResolvedValue({
     crawler: {
@@ -67,6 +72,7 @@ beforeEach(async () => {
       dbExists: true,
       scrapeMode: "month",
       isHistoryMode: false,
+      historyMaxMonths: 360,
       isDebug: false,
       isHeaded: false,
     },
@@ -181,6 +187,7 @@ describe("runCrawler progress", () => {
         dbExists: true,
         scrapeMode: "month",
         isHistoryMode: false,
+        historyMaxMonths: 360,
         isDebug: false,
         isHeaded: false,
       },
@@ -276,6 +283,7 @@ describe("runCrawler progress", () => {
         dbExists: true,
         scrapeMode: "month",
         isHistoryMode: false,
+        historyMaxMonths: 360,
         isDebug: false,
         isHeaded: false,
       },
@@ -345,6 +353,7 @@ describe("runCrawler progress", () => {
         dbExists: true,
         scrapeMode: "month",
         isHistoryMode: false,
+        historyMaxMonths: 360,
         isDebug: false,
         isHeaded: false,
       },
@@ -391,6 +400,7 @@ describe("runCrawler progress", () => {
         dbExists: true,
         scrapeMode: "month",
         isHistoryMode: false,
+        historyMaxMonths: 360,
         isDebug: false,
         isHeaded: false,
       },
@@ -461,6 +471,7 @@ describe("runCrawler progress", () => {
         dbExists: true,
         scrapeMode: "month",
         isHistoryMode: false,
+        historyMaxMonths: 360,
         isDebug: false,
         isHeaded: false,
       },
@@ -510,6 +521,7 @@ describe("runCrawler progress", () => {
         dbExists: true,
         scrapeMode: "history",
         isHistoryMode: true,
+        historyMaxMonths: 360,
         isDebug: false,
         isHeaded: false,
       },
@@ -548,6 +560,86 @@ describe("runCrawler progress", () => {
       historyMonths,
       undefined,
       new Map([["account-a", "銀行"]]),
+    );
+  });
+
+  test("新規口座を検出したら通常更新でも全期間取得へ切り替える", async () => {
+    vi.mocked(getAccountMfIds).mockResolvedValue(new Set(["account-a"]));
+    vi.mocked(runScrapePhase).mockResolvedValue({
+      defaultGroup: null,
+      globalData: {
+        registeredAccounts: {
+          accounts: [
+            {
+              mfId: "account-a",
+              name: "Account A",
+              type: "自動連携",
+              status: "ok",
+              lastUpdated: "2026-07-01",
+              url: "",
+              totalAssets: 0,
+            },
+            {
+              mfId: "account-b",
+              name: "Account B",
+              type: "自動連携",
+              status: "ok",
+              lastUpdated: "2026-07-01",
+              url: "",
+              totalAssets: 0,
+            },
+          ],
+        },
+        portfolio: { items: [], totalAssets: 0 },
+        liabilities: { items: [], totalLiabilities: 0 },
+        cashFlow: {
+          month: "2026-07",
+          totalIncome: 0,
+          totalExpense: 0,
+          balance: 0,
+          items: [],
+        },
+        refreshResult: { completed: true, incompleteAccounts: [] },
+      },
+      groupDataList: [],
+    });
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await runCrawler(progress);
+
+    expect(runCashFlowHistoryPhase).toHaveBeenCalledWith(
+      expect.anything(),
+      "primary",
+      expect.anything(),
+      expect.objectContaining({ isHistoryMode: true }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  test("手動指定で既存口座だけでも全期間を再取得できる", async () => {
+    vi.mocked(getAccountMfIds).mockResolvedValue(new Set());
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await runCrawler(progress, { history: true });
+
+    expect(runCashFlowHistoryPhase).toHaveBeenCalledWith(
+      expect.anything(),
+      "primary",
+      expect.anything(),
+      expect.objectContaining({ isHistoryMode: true }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
     );
   });
 });

@@ -283,7 +283,11 @@ terraform -chdir=terraform output -raw tunnel_id
 - **ホストを再起動する**: Docker Desktopの自動起動後、`restart: unless-stopped`を設定した各コンテナも自動復帰する
 - **イメージを再ビルドする**: `docker compose build && docker compose up -d`
 - **crawlerをすぐに実行する**: `docker compose exec crawler pnpm --filter @mf-dashboard/crawler start`
+- **全期間を再取得する**: ダッシュボード右上の更新メニューから、対象プロファイルの「全期間を再取得」を選ぶ
+- **CLIで全期間を再取得する**: `docker compose exec -e SCRAPE_MODE=history crawler pnpm --filter @mf-dashboard/crawler start`
 - **webの表示だけを更新する**: `docker compose exec crawler sh -c 'curl -fsS -X POST -H "Authorization: Bearer ${REFRESH_TOKEN}" "http://web:8765${NEXT_PUBLIC_BASE_PATH}/api/refresh/"'`
+
+通常更新で新しい口座またはカードを検出した場合も、そのプロファイルは自動的に全期間取得へ切り替わる。全期間取得はMoney Forward側で閲覧できる最古月まで進み、当月は通常取得した最新データを優先して保存する。プレミアム会員へ変更して閲覧可能期間が広がった場合は、更新メニューの「全期間を再取得」を一度実行する。探索の安全上限は既定360か月で、必要な場合だけ`.env`の`HISTORY_MAX_MONTHS`（1〜600）で変更できる。
 
 ## 5. オプション設定
 

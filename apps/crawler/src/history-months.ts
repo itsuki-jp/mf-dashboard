@@ -1,4 +1,4 @@
-import { getJstYearMonthKey, parseYearMonthKey, shiftYearMonthKey } from "@mf-dashboard/date-utils";
+import { getJstYearMonthKey, shiftYearMonthKey } from "@mf-dashboard/date-utils";
 
 /**
  * History mode fetches months by calendar month, not by day offset.
@@ -8,9 +8,4 @@ import { getJstYearMonthKey, parseYearMonthKey, shiftYearMonthKey } from "@mf-da
  */
 export function getHistoryMonth(now: Date, monthsAgo: number): string {
   return shiftYearMonthKey(getJstYearMonthKey(now), -monthsAgo);
-}
-
-export function getHistoryMaxMonths(now: Date): number {
-  const { month } = parseYearMonthKey(getJstYearMonthKey(now));
-  return month + 12;
 }

@@ -148,6 +148,20 @@ describe("/api/crawler/refresh/", () => {
     expect(new Headers(requestInit?.headers).get("content-type")).toBe("application/json");
   });
 
+  it("forwards a full-history crawler run", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ running: true }, 202));
+    const request = sameOriginPostRequest({ "content-type": "application/json" });
+    const historyRequest = new Request(request, {
+      body: JSON.stringify({ profileId: "primary", history: true }),
+    });
+
+    const res = await POST(historyRequest);
+
+    expect(res.status).toBe(202);
+    const requestInit = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    expect(requestInit?.body).toBe(JSON.stringify({ profileId: "primary", history: true }));
+  });
+
   it("rejects an unauthenticated crawler run", async () => {
     mocks.hasValidDashboardAccess.mockResolvedValue(false);
 
