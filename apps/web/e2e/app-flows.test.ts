@@ -1,5 +1,9 @@
 import { expect, type Page, test } from "@playwright/test";
 
+const DEMO_PROFILE_SCOPE = "/profile--demo";
+const DEFAULT_GROUP_SCOPE = "/demo%3A0";
+const INVESTMENT_GROUP_SCOPE = "/demo%3Ademo_group_001";
+
 async function expectHeading(page: Page, name: string | RegExp) {
   await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
 }
@@ -83,36 +87,42 @@ test.describe("App flows", () => {
     await page.goto("/cf");
     await expectHeading(page, "収支");
 
+    await page.getByRole("combobox", { name: "表示対象のプロフィールを選択" }).click();
+    await page.getByRole("option", { name: /Demo/ }).click();
+
+    await expectLocation(page, `${DEMO_PROFILE_SCOPE}/cf`);
+    await expectHeading(page, "収支");
+
     await page.getByRole("combobox", { name: "グループを選択" }).click();
     await page.getByRole("option", { name: "投資" }).click();
 
-    await expectLocation(page, "/demo_group_001/cf");
+    await expectLocation(page, `${INVESTMENT_GROUP_SCOPE}/cf`);
     await expectHeading(page, "収支");
     await expect(page.getByRole("combobox", { name: "グループを選択" })).toContainText("投資");
 
     const destinations = [
-      { link: "資産", path: "/demo_group_001/bs", heading: "資産" },
+      { link: "資産", path: `${INVESTMENT_GROUP_SCOPE}/bs`, heading: "資産" },
       {
         link: "インサイト",
-        path: "/demo_group_001/insights",
+        path: `${INVESTMENT_GROUP_SCOPE}/insights`,
         heading: "財務インサイト",
       },
       {
         link: "連携サービス",
-        path: "/demo_group_001/accounts",
+        path: `${INVESTMENT_GROUP_SCOPE}/accounts`,
         heading: "連携サービス一覧",
       },
       {
         link: "シミュレーター",
-        path: "/demo_group_001/simulator",
+        path: `${INVESTMENT_GROUP_SCOPE}/simulator`,
         heading: "シミュレーター",
       },
       {
         link: "ダッシュボード",
-        path: "/demo_group_001",
+        path: INVESTMENT_GROUP_SCOPE,
         heading: "ダッシュボード",
       },
-      { link: "収支", path: "/demo_group_001/cf", heading: "収支" },
+      { link: "収支", path: `${INVESTMENT_GROUP_SCOPE}/cf`, heading: "収支" },
     ] as const;
 
     for (const { link, path, heading } of destinations) {
@@ -125,6 +135,12 @@ test.describe("App flows", () => {
 
     await page.getByRole("combobox", { name: "グループを選択" }).click();
     await page.getByRole("option", { name: "グループ選択なし" }).click();
+
+    await expectLocation(page, `${DEFAULT_GROUP_SCOPE}/cf`);
+    await expectHeading(page, "収支");
+
+    await page.getByRole("combobox", { name: "表示対象のプロフィールを選択" }).click();
+    await page.getByRole("option", { name: "すべて", exact: true }).click();
 
     await expectLocation(page, "/cf");
     await expectHeading(page, "収支");
@@ -208,11 +224,11 @@ test.describe("App flows", () => {
   });
 
   test("opens account details without leaving the selected group", async ({ page }) => {
-    await page.goto("/demo_group_001/accounts");
+    await page.goto(`${INVESTMENT_GROUP_SCOPE}/accounts`);
     await expectHeading(page, "連携サービス一覧");
 
     await page.getByRole("link", { name: /^SBI証券 自動連携/ }).click();
-    await expectLocation(page, "/demo_group_001/accounts/demo_000005");
+    await expectLocation(page, `${INVESTMENT_GROUP_SCOPE}/accounts/demo_000005`);
     await expectHeading(page, "SBI証券");
     await expect(page.getByRole("combobox", { name: "グループを選択" })).toContainText("投資");
   });
@@ -263,7 +279,7 @@ test.describe("App flows", () => {
     const invalidPaths = [
       "/unknown-group",
       "/accounts/unknown-account",
-      "/demo_group_001/accounts/unknown-account",
+      `${INVESTMENT_GROUP_SCOPE}/accounts/unknown-account`,
     ];
 
     for (const path of invalidPaths) {
@@ -274,7 +290,7 @@ test.describe("App flows", () => {
       });
     }
 
-    for (const path of ["/cf/1900-01", "/demo_group_001/cf/1900-01"]) {
+    for (const path of ["/cf/1900-01", `${INVESTMENT_GROUP_SCOPE}/cf/1900-01`]) {
       await test.step(`Render the empty month state for ${path}`, async () => {
         await page.goto(path);
         await expectHeading(page, "収支 - 1900年1月");
