@@ -197,6 +197,12 @@ export const TargetSelection: Story = {
     );
     await expect(within(popover).getByRole("button", { name: "Primaryだけ更新" })).toBeVisible();
     await expect(within(popover).getByRole("button", { name: "Secondaryだけ更新" })).toBeVisible();
+    await expect(
+      within(popover).getByRole("button", { name: "Primaryの全期間を再取得" }),
+    ).toBeVisible();
+    await expect(
+      within(popover).getByRole("button", { name: "Secondaryの全期間を再取得" }),
+    ).toBeVisible();
   },
 };
 

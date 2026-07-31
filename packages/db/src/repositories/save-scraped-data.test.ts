@@ -665,6 +665,33 @@ describe("saveScrapedData", () => {
     ]);
   });
 
+  test("履歴置換に当月が含まれてもcurrent dataの当月取引を保持する", async () => {
+    const fullData = createScrapedData();
+    fullData.cashFlow.items = [
+      {
+        mfId: "current-month-a",
+        date: "2026-07-01",
+        category: "Category A",
+        subCategory: null,
+        description: "Transaction A",
+        amount: 1_000,
+        type: "expense",
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+      },
+    ];
+
+    await saveScrapedDataBatch(db, PROFILE, {
+      fullData,
+      groupOnlyData: [],
+      historyMonths: [{ month: "2026-07", items: [] }],
+    });
+
+    await expect(db.select().from(schema.transactions).all()).resolves.toEqual([
+      expect.objectContaining({ mfId: "current-month-a", date: "2026-07-01" }),
+    ]);
+  });
+
   test("primary保存後にsecondaryを保存しても両profileを読取対象に保つ", async () => {
     await saveScrapedDataBatch(db, PROFILE, {
       fullData: createScrapedData(),

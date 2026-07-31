@@ -21,13 +21,15 @@ const DEFAULT_HOST = "127.0.0.1";
 
 interface CrawlerTriggerServerOptions {
   getState?: () => Promise<CrawlerRunState>;
-  startRun?: (profileId?: string) => Promise<CrawlerRunState>;
+  startRun?: (profileId?: string, history?: boolean) => Promise<CrawlerRunState>;
   watchState?: (onChange: () => void, onError: (err: Error) => void) => Promise<() => void>;
 }
 
 const MAX_RUN_REQUEST_BYTES = 1_024;
 
-async function readRequestedProfileId(request: IncomingMessage): Promise<string | undefined> {
+async function readRequestedRun(
+  request: IncomingMessage,
+): Promise<{ profileId?: string; history: boolean }> {
   let body = "";
   for await (const chunk of request) {
     body += chunk.toString();
@@ -35,21 +37,30 @@ async function readRequestedProfileId(request: IncomingMessage): Promise<string 
       throw new Error("invalid profile selection");
     }
   }
-  if (!body.trim()) return undefined;
+  if (!body.trim()) return { history: false };
 
   const value: unknown = JSON.parse(body);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("invalid profile selection");
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
   if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    Object.keys(value).length !== 1 ||
-    !("profileId" in value) ||
-    typeof value.profileId !== "string"
+    keys.length === 0 ||
+    keys.some((key) => key !== "profileId" && key !== "history") ||
+    ("profileId" in record && typeof record.profileId !== "string") ||
+    ("history" in record && typeof record.history !== "boolean")
   ) {
     throw new Error("invalid profile selection");
   }
-  assertValidProfileId(value.profileId);
-  return value.profileId;
+
+  const profileId = typeof record.profileId === "string" ? record.profileId : undefined;
+  const history = typeof record.history === "boolean" ? record.history : false;
+  if (profileId !== undefined) assertValidProfileId(profileId);
+  return {
+    ...(profileId ? { profileId } : {}),
+    history,
+  };
 }
 
 type ProgressReporter = Awaited<ReturnType<typeof createCrawlerProgressReporter>>;
@@ -212,7 +223,10 @@ async function streamCrawlerState(
   }
 }
 
-export async function startCrawlerRun(profileId?: string): Promise<CrawlerRunState> {
+export async function startCrawlerRun(
+  profileId?: string,
+  history = false,
+): Promise<CrawlerRunState> {
   const lock = await acquireCrawlerRunLock("manual");
   let progress: Awaited<ReturnType<typeof createCrawlerProgressReporter>>;
   try {
@@ -229,7 +243,7 @@ export async function startCrawlerRun(profileId?: string): Promise<CrawlerRunSta
   void (async () => {
     try {
       const { runCrawler } = await import("./run.js");
-      await runCrawler(progress, { profileId });
+      await runCrawler(progress, { profileId, history });
       await progress.finish("success");
     } catch (err) {
       await recordManualRunFailure(progress);
@@ -291,16 +305,22 @@ export function createCrawlerTriggerServer(options: CrawlerTriggerServerOptions 
           return;
         }
 
-        let profileId: string | undefined;
+        let requestedRun: Awaited<ReturnType<typeof readRequestedRun>>;
         try {
-          profileId = await readRequestedProfileId(request);
+          requestedRun = await readRequestedRun(request);
         } catch {
           json(response, 400, { error: "invalid profile selection" });
           return;
         }
 
         try {
-          json(response, 202, await startRun(profileId));
+          json(
+            response,
+            202,
+            requestedRun.history
+              ? await startRun(requestedRun.profileId, true)
+              : await startRun(requestedRun.profileId),
+          );
         } catch (err) {
           if (err instanceof CrawlerAlreadyRunningError) {
             json(response, 409, err.state);

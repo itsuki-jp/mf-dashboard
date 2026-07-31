@@ -216,6 +216,28 @@ describe("ActionIcons", () => {
     );
   });
 
+  it("offers a profile-targeted full-history refresh", async () => {
+    render(
+      <ActionIcons
+        variant="header"
+        profiles={[{ id: "primary", name: "Primary" }]}
+        selectedProfileId="primary"
+      />,
+    );
+    await emitStatus({ available: true, running: false });
+
+    fireEvent.click(await screen.findByRole("button", { name: "金融機関データを更新" }));
+    fireEvent.click(screen.getByRole("button", { name: "Primaryの全期間を再取得" }));
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ profileId: "primary", history: true }),
+      }),
+    );
+  });
+
   it("applies a terminal status received while starting a refresh", async () => {
     let resolvePost: ((response: Response) => void) | undefined;
     vi.mocked(global.fetch).mockReturnValueOnce(

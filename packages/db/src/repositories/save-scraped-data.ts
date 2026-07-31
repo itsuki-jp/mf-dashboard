@@ -170,6 +170,13 @@ export async function saveScrapedDataBatch(
     if (data.historyMonths?.length) {
       const accountIdMap = await buildAccountIdMap(transaction, profile.id);
       for (const { items, month } of data.historyMonths) {
+        if (fullData?.cashFlow.month === month) {
+          savedCounts.push(
+            fullData.cashFlow.items.filter((item) => item.mfId && !item.mfId.startsWith("unknown"))
+              .length,
+          );
+          continue;
+        }
         savedCounts.push(
           await replaceTransactionsForMonth(transaction, profile.id, month, items, accountIdMap),
         );
