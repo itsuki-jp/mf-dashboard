@@ -2,10 +2,15 @@ import type { SecurityCodeCandidate } from "./security-code.js";
 
 const DEFAULT_BASE_URL = "https://edinetdb.jp/v1";
 
-interface EdinetForecastDoe {
+type EdinetForecastShareBasis = "pre_split" | "post_split" | "indeterminate";
+
+export interface EdinetForecastDoe {
+  adjusted_forecast_dividend_per_share?: number | null;
   forecast_dividend_per_share?: number | null;
   forecast_dividend_total?: number | null;
   forecast_fiscal_year?: number | null;
+  forecast_share_basis?: EdinetForecastShareBasis | null;
+  forecast_split_adjustment_factor?: number | null;
   source_disclosure_date?: string | null;
   source_quarter?: string | null;
   value?: number | null;

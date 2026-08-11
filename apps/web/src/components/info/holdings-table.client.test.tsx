@@ -163,6 +163,27 @@ describe("HoldingsTableTotal", () => {
 });
 
 describe("HoldingsTableClient", () => {
+  it("業種別内訳を固定高のチャート外に表示する", () => {
+    const stockCategories = [
+      {
+        ...categories[0],
+        items: [
+          { ...categories[0].items[0], industryName: "業種 A" },
+          { ...categories[0].items[1], industryName: "業種 B" },
+        ],
+      },
+    ];
+
+    render(<HoldingsTableClient categories={stockCategories} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "業種別" }));
+
+    const chart = screen.getByTestId("holdings-donut-chart");
+    expect(chart.className).toContain("h-56");
+    expect(chart.nextElementSibling?.textContent).toContain("業種 A");
+    expect(chart.nextElementSibling?.className).not.toContain("h-56");
+  });
+
   it("後方ページの表示中に絞り込んでも該当する保有資産を表示する", async () => {
     const institutionAItems = Array.from({ length: 11 }, (_, index) => ({
       ...categories[0].items[0],

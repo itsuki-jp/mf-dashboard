@@ -1,5 +1,6 @@
-import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
-import { getDb, type Db, type DbExecutor, schema } from "../index";
+import { and, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
+import { getDb, type Db, type DbExecutor } from "../index";
+import * as schema from "../schema/schema";
 import type {
   MarketDataStage,
   MarketDataSyncStatus,
@@ -15,14 +16,47 @@ export const EDINET_DB_SOFT_LIMIT = 90;
 export const EDINET_DB_SAFETY_RESERVE = 5;
 
 export async function listHoldingSecurityCodes(db: Db = getDb()): Promise<string[]> {
-  const rows = await db
-    .selectDistinct({ code: schema.holdings.code })
-    .from(schema.holdings)
-    .where(and(eq(schema.holdings.type, "asset"), isNotNull(schema.holdings.code)))
+  const latestSnapshots = await db
+    .select({ profileId: schema.groups.profileId, snapshotId: schema.dailySnapshots.id })
+    .from(schema.dailySnapshots)
+    .innerJoin(schema.groups, eq(schema.groups.id, schema.dailySnapshots.groupId))
+    .where(eq(schema.groups.mfGroupId, "0"))
+    .orderBy(desc(schema.dailySnapshots.date), desc(schema.dailySnapshots.id))
     .all();
-  return rows
-    .map(({ code }) => code)
-    .filter((code): code is string => typeof code === "string" && code.trim().length > 0);
+
+  const latestSnapshotIds: number[] = [];
+  const profilesWithSnapshot = new Set<string>();
+  for (const snapshot of latestSnapshots) {
+    if (profilesWithSnapshot.has(snapshot.profileId)) continue;
+    profilesWithSnapshot.add(snapshot.profileId);
+    latestSnapshotIds.push(snapshot.snapshotId);
+  }
+  if (latestSnapshotIds.length === 0) return [];
+
+  const rows = await db
+    .select({ code: schema.holdings.code })
+    .from(schema.holdingValues)
+    .innerJoin(schema.holdings, eq(schema.holdings.id, schema.holdingValues.holdingId))
+    .innerJoin(schema.dailySnapshots, eq(schema.dailySnapshots.id, schema.holdingValues.snapshotId))
+    .innerJoin(schema.groups, eq(schema.groups.id, schema.dailySnapshots.groupId))
+    .innerJoin(schema.assetCategories, eq(schema.assetCategories.id, schema.holdings.categoryId))
+    .where(
+      and(
+        inArray(schema.holdingValues.snapshotId, latestSnapshotIds),
+        eq(schema.holdings.profileId, schema.groups.profileId),
+        eq(schema.holdings.type, "asset"),
+        eq(schema.assetCategories.name, "株式(現物)"),
+        isNotNull(schema.holdings.code),
+      ),
+    )
+    .all();
+  return [
+    ...new Set(
+      rows
+        .map(({ code }) => code?.trim().toUpperCase().replace(/\.T$/, "") ?? "")
+        .filter((code) => code.length > 0),
+    ),
+  ].sort();
 }
 
 export async function upsertStockMarketData(
@@ -126,6 +160,16 @@ export async function upsertStockDividendHistory(
         updatedAt: timestamp,
       },
     })
+    .run();
+}
+
+export async function clearStockDividendHistory(
+  db: DbExecutor,
+  stockMarketDataId: number,
+): Promise<void> {
+  await db
+    .delete(schema.stockDividendHistory)
+    .where(eq(schema.stockDividendHistory.stockMarketDataId, stockMarketDataId))
     .run();
 }
 

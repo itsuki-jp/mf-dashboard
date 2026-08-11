@@ -277,32 +277,34 @@ function CategoryCard({
       {/* Chart + Legend area */}
       <div className="flex flex-col sm:flex-row sm:items-start gap-6 p-4">
         {/* Donut chart */}
-        <div className="w-56 h-56 shrink-0 self-center sm:self-auto">
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
-            initialDimension={CHART_INITIAL_DIMENSION}
-          >
-            <PieChart>
-              <Pie
-                data={chartData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                dataKey="value"
-                strokeWidth={0}
-              >
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value) => formatCurrency(value as number)}
-                contentStyle={chartTooltipStyle}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="flex w-56 shrink-0 flex-col gap-3 self-center sm:self-auto">
+          <div className="h-56" data-testid="holdings-donut-chart">
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              initialDimension={CHART_INITIAL_DIMENSION}
+            >
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  dataKey="value"
+                  strokeWidth={0}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value) => formatCurrency(value as number)}
+                  contentStyle={chartTooltipStyle}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
           {stockView !== "security" && (
             <StockBreakdownList rows={buildStockBreakdown(items, stockView)} />
           )}

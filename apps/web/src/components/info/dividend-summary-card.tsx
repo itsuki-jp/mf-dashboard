@@ -31,11 +31,17 @@ export async function DividendSummaryCard({ groupId }: { groupId?: string }) {
             </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">年間予想配当</p>
+            <p className="text-sm text-muted-foreground">年間予想配当（会社予想・税引前）</p>
             <p className="mt-1 font-semibold tabular-nums">
               {data.summary.forecastAnnualGross === null
                 ? "算出不可"
                 : formatCurrency(data.summary.forecastAnnualGross)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {data.summary.periodBasis === "fiscal_year"
+                ? `FY${data.forecastFiscalYears.join(", FY") || "未定"}`
+                : "年度基準未取得"}
+              ・{summaryCalculationLabel(data.summary.calculationStatus)}
             </p>
           </div>
           <div>
@@ -76,4 +82,19 @@ export async function DividendSummaryCard({ groupId }: { groupId?: string }) {
       </CardContent>
     </Card>
   );
+}
+
+function summaryCalculationLabel(
+  status: Awaited<ReturnType<typeof getDividendDashboardData>>["summary"]["calculationStatus"],
+): string {
+  switch (status) {
+    case "ok":
+      return "算出済み";
+    case "forecast_fiscal_year_only":
+      return "会社予想は事業年度基準";
+    case "forecast_unavailable":
+      return "予想データ未取得";
+    default:
+      return "配当データ未取得";
+  }
 }

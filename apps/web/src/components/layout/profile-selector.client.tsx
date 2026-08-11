@@ -29,14 +29,29 @@ export function profileIdFromSelectionValue(value: string): string | null {
   return value === ALL_PROFILES_VALUE ? null : value;
 }
 
-export function buildProfileSelectionPath(pathname: string, profileId: string | null): string {
+const SCOPE_DEPENDENT_SEARCH_PARAMS = ["security", "account", "product"] as const;
+
+export function buildProfileSelectionPath(
+  pathname: string,
+  profileId: string | null,
+  searchParams = "",
+  hash = "",
+): string {
   const pagePath = extractPagePath(pathname);
   // Account IDs are profile-local. There is no unambiguous all-profile detail URL,
   // so return to the aggregate account list when clearing the profile scope.
-  if (/^accounts\/[^/]+$/.test(pagePath)) {
-    return buildGroupPath(profileId ? createProfileScopeId(profileId) : null, "accounts");
+  const targetPath = /^accounts\/[^/]+$/.test(pagePath)
+    ? buildGroupPath(profileId ? createProfileScopeId(profileId) : null, "accounts")
+    : buildGroupPath(profileId ? createProfileScopeId(profileId) : null, pagePath);
+  const params = new URLSearchParams(searchParams);
+  for (const key of SCOPE_DEPENDENT_SEARCH_PARAMS) {
+    params.delete(key);
   }
-  return buildGroupPath(profileId ? createProfileScopeId(profileId) : null, pagePath);
+  params.sort();
+
+  const query = params.toString();
+  const normalizedHash = hash ? `#${hash.replace(/^#/, "")}` : "";
+  return `${targetPath}${query ? `?${query}` : ""}${normalizedHash}`;
 }
 
 function statusLabel(status: string | null): string | null {
@@ -74,7 +89,14 @@ export function ProfileSelectorClient({ profiles, groupProfiles }: ProfileSelect
   function handleChange(value: string | null) {
     if (!value) return;
     startTransition(() =>
-      router.push(buildProfileSelectionPath(pathname, profileIdFromSelectionValue(value)) as Route),
+      router.push(
+        buildProfileSelectionPath(
+          pathname,
+          profileIdFromSelectionValue(value),
+          window.location.search,
+          window.location.hash,
+        ) as Route,
+      ),
     );
   }
 

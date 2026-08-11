@@ -1,5 +1,6 @@
 import type { Db } from "@mf-dashboard/db";
 import {
+  clearStockDividendHistory,
   completeMarketDataRequest,
   EDINET_DB_DEFAULT_TIMEZONE,
   EDINET_DB_SOURCE,
@@ -14,7 +15,11 @@ import {
 } from "@mf-dashboard/db/repository/market-data";
 import type { DividendPeriodBasis, StockMarketDataInput } from "@mf-dashboard/db/types";
 import { error, info, warn } from "../logger.js";
-import { EdinetDbApiError, type EdinetDbClient } from "./edinet-db-client.js";
+import {
+  EdinetDbApiError,
+  type EdinetDbClient,
+  type EdinetForecastDoe,
+} from "./edinet-db-client.js";
 import { normalizeSecurityCode, resolveSecurityCode } from "./security-code.js";
 
 const HISTORY_YEARS = 6;
@@ -92,6 +97,83 @@ function asFiniteNumber(value: number | null | undefined): number | null {
 
 function toFiscalYear(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isInteger(value) ? value : null;
+}
+
+function isPositiveFiniteNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function isSplitAdjustedValueConsistent(raw: number, adjusted: number, factor: number): boolean {
+  const expected = raw / factor;
+  // EDINET DB's adjusted value is provider-supplied, but may be rounded for display.
+  return Math.abs(expected - adjusted) <= Math.max(0.01, Math.abs(expected) * 0.001);
+}
+
+function forecastDpsInput(
+  forecast: EdinetForecastDoe | null,
+): Pick<StockMarketDataInput, "forecastDpsRaw" | "forecastDpsAdjusted" | "forecastShareBasis"> {
+  const raw = asFiniteNumber(forecast?.forecast_dividend_per_share);
+  const adjusted = asFiniteNumber(forecast?.adjusted_forecast_dividend_per_share);
+  const basis = forecast?.forecast_share_basis ?? null;
+
+  if (basis === "indeterminate") {
+    return {
+      forecastDpsRaw: raw,
+      forecastDpsAdjusted: null,
+      forecastShareBasis: "indeterminate",
+    };
+  }
+
+  if (basis === "pre_split") {
+    const factor = forecast?.forecast_split_adjustment_factor;
+    if (
+      raw === null ||
+      adjusted === null ||
+      !isPositiveFiniteNumber(factor) ||
+      !isSplitAdjustedValueConsistent(raw, adjusted, factor)
+    ) {
+      return {
+        forecastDpsRaw: raw,
+        forecastDpsAdjusted: null,
+        forecastShareBasis: "indeterminate",
+      };
+    }
+    return {
+      forecastDpsRaw: raw,
+      forecastDpsAdjusted: adjusted,
+      forecastShareBasis: "pre_split",
+    };
+  }
+
+  if (basis === "post_split") {
+    if (adjusted !== null) {
+      return {
+        forecastDpsRaw: raw,
+        forecastDpsAdjusted: null,
+        forecastShareBasis: "indeterminate",
+      };
+    }
+    return {
+      forecastDpsRaw: raw,
+      forecastDpsAdjusted: null,
+      forecastShareBasis: "post_split",
+    };
+  }
+
+  // A non-null adjusted value is only part of EDINET DB's pre_split contract.
+  // Treat an unknown basis as unavailable too: runtime API responses are not type-checked.
+  if (basis !== null || adjusted !== null) {
+    return {
+      forecastDpsRaw: raw,
+      forecastDpsAdjusted: null,
+      forecastShareBasis: "indeterminate",
+    };
+  }
+  return {
+    forecastDpsRaw: raw,
+    forecastDpsAdjusted: null,
+    forecastShareBasis: "reported",
+  };
 }
 
 function emptyStockInput(
@@ -217,17 +299,68 @@ async function syncOneSecurity(
       return "skipped";
     }
 
-    stock = emptyStockInput(normalizedCode, resolution.candidate, mappingFetchedAt);
-    externalSecurityId = resolution.candidate.edinet_code;
-    stockMarketDataId = await upsertStockMarketData(db, stock);
-    await upsertMarketDataSyncStatus(db, {
+    const retainsExistingIdentity =
+      existingRow?.externalSecurityId === resolution.candidate.edinet_code;
+    const identityChanged = existingRow !== undefined && !retainsExistingIdentity;
+    stock = {
+      ...(retainsExistingIdentity && existingRow
+        ? stockInputFromRow(existingRow)
+        : emptyStockInput(normalizedCode, resolution.candidate, mappingFetchedAt)),
+      source: EDINET_DB_SOURCE,
+      externalSecurityId: resolution.candidate.edinet_code,
       normalizedCode,
-      stage: "mapping",
-      status: "success",
-      lastSuccessAt: mappingFetchedAt,
-      ttlSeconds: STAGE_TTL_SECONDS.mapping,
-      asOf: mappingFetchedAt,
-    });
+      market: null,
+      name: resolution.candidate.name,
+      industryName: resolution.candidate.industry ?? null,
+      listingStatus: resolution.candidate.listing_status ?? "unknown",
+      mappingStatus: "resolved",
+      lastMappedAt: mappingFetchedAt,
+      lastErrorCode: null,
+    };
+    externalSecurityId = resolution.candidate.edinet_code;
+    if (identityChanged) {
+      stockMarketDataId = await db.transaction(async (transaction) => {
+        const id = await upsertStockMarketData(transaction, stock);
+        await clearStockDividendHistory(transaction, id);
+        await upsertMarketDataSyncStatus(transaction, {
+          normalizedCode,
+          stage: "mapping",
+          status: "success",
+          lastSuccessAt: mappingFetchedAt,
+          ttlSeconds: STAGE_TTL_SECONDS.mapping,
+          asOf: mappingFetchedAt,
+        });
+        await upsertMarketDataSyncStatus(transaction, {
+          normalizedCode,
+          stage: "forecast",
+          status: "stale",
+          errorCode: "identity_changed",
+          lastSuccessAt: null,
+          ttlSeconds: null,
+          asOf: null,
+        });
+        await upsertMarketDataSyncStatus(transaction, {
+          normalizedCode,
+          stage: "history",
+          status: "stale",
+          errorCode: "identity_changed",
+          lastSuccessAt: null,
+          ttlSeconds: null,
+          asOf: null,
+        });
+        return id;
+      });
+    } else {
+      stockMarketDataId = await upsertStockMarketData(db, stock);
+      await upsertMarketDataSyncStatus(db, {
+        normalizedCode,
+        stage: "mapping",
+        status: "success",
+        lastSuccessAt: mappingFetchedAt,
+        ttlSeconds: STAGE_TTL_SECONDS.mapping,
+        asOf: mappingFetchedAt,
+      });
+    }
   }
 
   const forecastStatus = await getMarketDataSyncStatus(
@@ -242,6 +375,7 @@ async function syncOneSecurity(
         client.getCompany(externalSecurityId),
       );
       const forecast = company.forecast_doe ?? null;
+      const dps = forecastDpsInput(forecast);
       const forecastFetchedAt = new Date().toISOString();
       stock = {
         ...stock,
@@ -250,9 +384,7 @@ async function syncOneSecurity(
         listingStatus: company.listing_status ?? stock.listingStatus,
         forecastFiscalYear: toFiscalYear(forecast?.forecast_fiscal_year),
         forecastQuarter: forecast?.source_quarter ?? null,
-        forecastDpsRaw: asFiniteNumber(forecast?.forecast_dividend_per_share),
-        forecastDpsAdjusted: null,
-        forecastShareBasis: "reported",
+        ...dps,
         forecastPeriodBasis: "fiscal_year" satisfies DividendPeriodBasis,
         forecastSourceDisclosureDate: forecast?.source_disclosure_date ?? null,
         forecastAsOf: forecastFetchedAt,
@@ -262,7 +394,8 @@ async function syncOneSecurity(
       await upsertMarketDataSyncStatus(db, {
         normalizedCode,
         stage: "forecast",
-        status: forecast?.forecast_dividend_per_share == null ? "empty" : "success",
+        status:
+          dps.forecastDpsRaw === null && dps.forecastDpsAdjusted === null ? "empty" : "success",
         lastSuccessAt: forecastFetchedAt,
         ttlSeconds: STAGE_TTL_SECONDS.forecast,
         asOf: forecastFetchedAt,

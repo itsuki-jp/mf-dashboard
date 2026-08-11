@@ -24,22 +24,24 @@ export function DividendHistoryChart({ title, rows }: DividendHistoryChartProps)
             >
               <span className="text-muted-foreground">{row.label}</span>
               <div className="space-y-1">
-                <div className="h-2 rounded-full bg-muted" title="実績">
+                <div className="h-2 rounded-full bg-muted" aria-hidden="true">
                   <div
                     className="h-full rounded-full bg-income"
                     style={{ width: `${(row.actual / max) * 100}%` }}
                   />
                 </div>
-                {row.forecast > 0 && (
-                  <div className="h-2 rounded-full bg-muted" title="予想">
-                    <div
-                      className="h-full rounded-full bg-primary/60"
-                      style={{ width: `${(row.forecast / max) * 100}%` }}
-                    />
-                  </div>
-                )}
+                <div className="h-2 rounded-full bg-muted" aria-hidden="true">
+                  <div
+                    className="h-full rounded-full bg-primary/60"
+                    style={{ width: `${(row.forecast / max) * 100}%` }}
+                  />
+                </div>
               </div>
-              <span className="text-right tabular-nums">{formatCurrency(row.actual)}</span>
+              <span className="text-right tabular-nums">
+                <span className="sr-only">実績 </span>
+                {formatCurrency(row.actual)}
+                <span className="sr-only">、予想 {formatCurrency(row.forecast)}</span>
+              </span>
             </div>
           ))}
         </div>

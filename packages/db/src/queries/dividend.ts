@@ -1,5 +1,6 @@
 import { and, eq, inArray, like } from "drizzle-orm";
-import { getDb, type Db, schema } from "../index";
+import { getDb, type Db } from "../index";
+import * as schema from "../schema/schema";
 import { getAccountIdsForGroups, resolveGroupIds } from "../shared/group-filter";
 import { getHoldingsWithLatestValues } from "./holding";
 
@@ -19,6 +20,15 @@ export interface DividendReceipt {
   date: string | null;
   netAmount: number | null;
   amountBasis: "net" | "unknown";
+  /** Transactions do not carry a trustworthy security identity in the current schema. */
+  securityStatus: "security_unresolved" | "unavailable" | "not_applicable";
+}
+
+export interface DividendMarketDataSyncStatus {
+  status: "never_synced" | "success" | "empty" | "unsupported" | "error" | "stale";
+  lastSuccessAt: string | null;
+  ttlSeconds: number | null;
+  isFresh: boolean;
 }
 
 export interface DividendSecurityRow {
@@ -34,7 +44,10 @@ export interface DividendSecurityRow {
   yieldOnCostPct: number | null;
   forecastFiscalYear: number | null;
   periodBasis: "fiscal_year" | "calendar_year" | "event_sum" | null;
-  dataStatus: "covered" | "unavailable" | "calculation_unavailable";
+  mappingStatus: "resolved" | "unresolved" | "ambiguous_match" | "unsupported" | "unavailable";
+  mappingSyncStatus: DividendMarketDataSyncStatus;
+  forecastSyncStatus: DividendMarketDataSyncStatus;
+  dataStatus: "covered" | "unavailable" | "stale" | "calculation_unavailable";
 }
 
 export interface DividendBreakdownRow {
@@ -73,12 +86,22 @@ export interface DividendDashboardData {
     totalHoldingCount: number;
   };
   securities: DividendSecurityRow[];
+  receipts: DividendReceipt[];
   industries: DividendBreakdownRow[];
   yieldBuckets: DividendBreakdownRow[];
   monthlySeries: DividendSeriesRow[];
   yearlySeries: DividendSeriesRow[];
   sourceAsOf: string | null;
 }
+
+const MARKET_DATA_SOURCE = "edinetdb";
+
+const NEVER_SYNCED: DividendMarketDataSyncStatus = {
+  status: "never_synced",
+  lastSuccessAt: null,
+  ttlSeconds: null,
+  isFresh: false,
+};
 
 export interface DividendSecurityDetail extends DividendSecurityRow {
   history: Array<{
@@ -104,6 +127,78 @@ function roundYen(value: number): number {
   return Math.round(value);
 }
 
+function isForecastFiscalYear(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 2000 && value <= 2100;
+}
+
+function toDividendPeriodBasis(
+  value: string | null | undefined,
+): DividendSecurityRow["periodBasis"] {
+  return value === "fiscal_year" || value === "calendar_year" || value === "event_sum"
+    ? value
+    : null;
+}
+
+function isSupportedForecastBasis(
+  value: DividendSecurityRow["periodBasis"],
+): value is "fiscal_year" {
+  // Current stock_market_data forecasts are full-company fiscal-year forecasts. Other bases
+  // require event-level reconciliation, which is deliberately outside this query's contract.
+  return value === "fiscal_year";
+}
+
+function toSyncStatus(value: string): DividendMarketDataSyncStatus["status"] {
+  switch (value) {
+    case "success":
+    case "empty":
+    case "unsupported":
+    case "error":
+    case "stale":
+    case "never_synced":
+      return value;
+    default:
+      return "error";
+  }
+}
+
+function makeSyncStatus(
+  row: typeof schema.marketDataSyncStatuses.$inferSelect | undefined,
+): DividendMarketDataSyncStatus {
+  if (!row) return NEVER_SYNCED;
+  const lastSuccessAt = row.lastSuccessAt;
+  const ttlSeconds = row.ttlSeconds;
+  const timestamp = lastSuccessAt ? Date.parse(lastSuccessAt) : Number.NaN;
+  const isFresh =
+    Number.isFinite(timestamp) &&
+    typeof ttlSeconds === "number" &&
+    ttlSeconds > 0 &&
+    Date.now() - timestamp < ttlSeconds * 1000;
+  return { status: toSyncStatus(row.status), lastSuccessAt, ttlSeconds, isFresh };
+}
+
+function isStaleSyncStatus(status: DividendMarketDataSyncStatus): boolean {
+  return status.status === "stale" || (status.status === "success" && !status.isFresh);
+}
+
+function isCoveredSyncStatus(status: DividendMarketDataSyncStatus): boolean {
+  return status.status === "success" && status.isFresh;
+}
+
+function selectForecastDps(
+  market: typeof schema.stockMarketData.$inferSelect | undefined,
+): number | null {
+  if (!market) return null;
+  switch (market.forecastShareBasis) {
+    case "pre_split":
+      return finite(market.forecastDpsAdjusted) ? market.forecastDpsAdjusted : null;
+    case "post_split":
+    case "reported":
+      return finite(market.forecastDpsRaw) ? market.forecastDpsRaw : null;
+    default:
+      return null;
+  }
+}
+
 export function classifyDividendTransaction(transaction: {
   id: number;
   date: string | null;
@@ -112,10 +207,25 @@ export function classifyDividendTransaction(transaction: {
   type: string;
   rawCategory: string | null;
   rawSubCategory: string | null;
+  description?: string | null;
   isTransfer: boolean;
   isExcludedFromCalculation: boolean;
 }): DividendReceipt {
   const rawText = `${transaction.rawCategory ?? ""} ${transaction.rawSubCategory ?? ""}`;
+  if (
+    transaction.isTransfer ||
+    transaction.isExcludedFromCalculation ||
+    transaction.type !== "income"
+  ) {
+    return {
+      status: "not_dividend",
+      transactionId: transaction.id,
+      date: transaction.date,
+      netAmount: null,
+      amountBasis: "unknown",
+      securityStatus: "not_applicable",
+    };
+  }
   if (
     transaction.amount === null ||
     transaction.amount <= 0 ||
@@ -128,19 +238,7 @@ export function classifyDividendTransaction(transaction: {
       date: transaction.date,
       netAmount: null,
       amountBasis: "unknown",
-    };
-  }
-  if (
-    transaction.isTransfer ||
-    transaction.isExcludedFromCalculation ||
-    transaction.type !== "income"
-  ) {
-    return {
-      status: "not_dividend",
-      transactionId: transaction.id,
-      date: transaction.date,
-      netAmount: null,
-      amountBasis: "unknown",
+      securityStatus: "unavailable",
     };
   }
   if (transaction.rawCategory === null && transaction.rawSubCategory === null) {
@@ -150,6 +248,21 @@ export function classifyDividendTransaction(transaction: {
       date: transaction.date,
       netAmount: null,
       amountBasis: "unknown",
+      securityStatus: "unavailable",
+    };
+  }
+  if (
+    !rawText.includes("配当") &&
+    !rawText.includes("分配") &&
+    (transaction.description?.includes("配当") || transaction.description?.includes("分配"))
+  ) {
+    return {
+      status: "ambiguous",
+      transactionId: transaction.id,
+      date: transaction.date,
+      netAmount: null,
+      amountBasis: "unknown",
+      securityStatus: "security_unresolved",
     };
   }
   if (!rawText.includes("配当") && !rawText.includes("分配")) {
@@ -159,6 +272,7 @@ export function classifyDividendTransaction(transaction: {
       date: transaction.date,
       netAmount: null,
       amountBasis: "unknown",
+      securityStatus: "not_applicable",
     };
   }
   return {
@@ -167,6 +281,7 @@ export function classifyDividendTransaction(transaction: {
     date: transaction.date,
     netAmount: transaction.amount,
     amountBasis: "net",
+    securityStatus: "security_unresolved",
   };
 }
 
@@ -177,7 +292,7 @@ function buildBreakdown(
   const amounts = new Map<string, number>();
   for (const row of rows) {
     const label = getLabel(row) ?? "データなし";
-    if (row.forecastAnnualGross === null) continue;
+    if (row.dataStatus !== "covered" || row.forecastAnnualGross === null) continue;
     amounts.set(label, (amounts.get(label) ?? 0) + row.forecastAnnualGross);
   }
   const total = [...amounts.values()].reduce((sum, amount) => sum + amount, 0);
@@ -198,7 +313,7 @@ function buildYieldBuckets(rows: DividendSecurityRow[]): DividendBreakdownRow[] 
   const amounts = buckets.map(() => 0);
   for (const row of rows) {
     const yieldPct = row.forecastYieldPct;
-    if (row.forecastAnnualGross === null) continue;
+    if (row.dataStatus !== "covered" || row.forecastAnnualGross === null) continue;
     if (yieldPct === null || !Number.isFinite(yieldPct)) {
       amounts[amounts.length - 1] += row.forecastAnnualGross;
       continue;
@@ -260,13 +375,34 @@ export async function getDividendDashboardData(
   const holdings = (await getHoldingsWithLatestValues(groupId, db)).filter(
     (holding) => holding.type === "asset" && holding.categoryName === "株式(現物)" && holding.code,
   );
+  const scopedCodes = new Set(
+    holdings.map((holding) => normalizeCode(holding.code ?? "")).filter(Boolean),
+  );
   let marketRows: (typeof schema.stockMarketData.$inferSelect)[] = [];
   try {
-    marketRows = await db.select().from(schema.stockMarketData).all();
+    marketRows = (await db.select().from(schema.stockMarketData).all()).filter(
+      (row) =>
+        row.source === MARKET_DATA_SOURCE && scopedCodes.has(normalizeCode(row.normalizedCode)),
+    );
   } catch {
     // An older database may not have the migration yet. Keep the existing dashboard usable.
   }
+  let syncRows: (typeof schema.marketDataSyncStatuses.$inferSelect)[] = [];
+  try {
+    syncRows = (await db.select().from(schema.marketDataSyncStatuses).all()).filter(
+      (row) =>
+        row.source === MARKET_DATA_SOURCE && scopedCodes.has(normalizeCode(row.normalizedCode)),
+    );
+  } catch {
+    // An older database may have market rows but not sync statuses. Treat forecasts as unavailable.
+  }
   const marketByCode = new Map(marketRows.map((row) => [normalizeCode(row.normalizedCode), row]));
+  const syncBySourceCodeStage = new Map(
+    syncRows.map((row) => [
+      `${row.source}\u0000${normalizeCode(row.normalizedCode)}\u0000${row.stage}`,
+      row,
+    ]),
+  );
   const aggregate = new Map<string, DividendSecurityRow & { costValueTotal: number | null }>();
 
   for (const holding of holdings) {
@@ -278,8 +414,37 @@ export async function getDividendDashboardData(
     const quantity = holding.quantity;
     const costValue =
       finite(holding.avgCostPrice) && finite(quantity) ? holding.avgCostPrice * quantity : null;
-    const dps = market ? (market.forecastDpsAdjusted ?? market.forecastDpsRaw) : null;
-    const annual = finite(dps) && finite(quantity) ? roundYen(dps * quantity) : null;
+    const dps = selectForecastDps(market);
+    const forecastFiscalYear =
+      market && isForecastFiscalYear(market.forecastFiscalYear) ? market.forecastFiscalYear : null;
+    const periodBasis = toDividendPeriodBasis(market?.forecastPeriodBasis);
+    const mappingStatus =
+      market?.mappingStatus === "resolved" ||
+      market?.mappingStatus === "unresolved" ||
+      market?.mappingStatus === "ambiguous_match" ||
+      market?.mappingStatus === "unsupported"
+        ? market.mappingStatus
+        : "unavailable";
+    const mappingSyncStatus = market
+      ? makeSyncStatus(
+          syncBySourceCodeStage.get(
+            `${market.source}\u0000${normalizeCode(market.normalizedCode)}\u0000mapping`,
+          ),
+        )
+      : NEVER_SYNCED;
+    const forecastSyncStatus = market
+      ? makeSyncStatus(
+          syncBySourceCodeStage.get(
+            `${market.source}\u0000${normalizeCode(market.normalizedCode)}\u0000forecast`,
+          ),
+        )
+      : NEVER_SYNCED;
+    const forecastInputsValid =
+      finite(dps) &&
+      finite(quantity) &&
+      forecastFiscalYear !== null &&
+      isSupportedForecastBasis(periodBasis);
+    const annual = forecastInputsValid ? roundYen(dps * quantity) : null;
     const next: DividendSecurityRow & { costValueTotal: number | null } = current ?? {
       code,
       name: holding.name,
@@ -291,8 +456,11 @@ export async function getDividendDashboardData(
       forecastAnnualGross: 0,
       forecastYieldPct: null,
       yieldOnCostPct: null,
-      forecastFiscalYear: market?.forecastFiscalYear ?? null,
-      periodBasis: (market?.forecastPeriodBasis as DividendSecurityRow["periodBasis"]) ?? null,
+      forecastFiscalYear,
+      periodBasis,
+      mappingStatus,
+      mappingSyncStatus,
+      forecastSyncStatus,
       dataStatus: "unavailable",
       costValueTotal: 0,
     };
@@ -312,11 +480,16 @@ export async function getDividendDashboardData(
     if (next.forecastAnnualGross !== null && next.costValue && next.costValue > 0) {
       next.yieldOnCostPct = (next.forecastAnnualGross / next.costValue) * 100;
     }
-    next.dataStatus = !market
-      ? "unavailable"
-      : next.forecastAnnualGross === null
-        ? "calculation_unavailable"
-        : "covered";
+    next.dataStatus =
+      !market || mappingStatus !== "resolved"
+        ? "unavailable"
+        : isStaleSyncStatus(mappingSyncStatus) || isStaleSyncStatus(forecastSyncStatus)
+          ? "stale"
+          : !isCoveredSyncStatus(mappingSyncStatus) || !isCoveredSyncStatus(forecastSyncStatus)
+            ? "unavailable"
+            : next.forecastAnnualGross === null
+              ? "calculation_unavailable"
+              : "covered";
     aggregate.set(code, next);
   }
 
@@ -345,7 +518,9 @@ export async function getDividendDashboardData(
   }
   const receipts = transactionRows.map((transaction) => classifyDividendTransaction(transaction));
   const matched = receipts.filter((receipt) => receipt.status === "matched");
-  const hasUnknownReceipts = receipts.some((receipt) => receipt.status === "unavailable");
+  const hasUnknownReceipts = receipts.some(
+    (receipt) => receipt.status === "unavailable" || receipt.status === "ambiguous",
+  );
   const actualReceivedNet =
     transactionRows.length === 0 || hasUnknownReceipts
       ? null
@@ -367,7 +542,7 @@ export async function getDividendDashboardData(
   );
   const forecastFiscalYears = [
     ...new Set(
-      securities
+      coveredRows
         .map((row) => row.forecastFiscalYear)
         .filter((value): value is number => value !== null),
     ),
@@ -402,6 +577,7 @@ export async function getDividendDashboardData(
     securities: securities.sort(
       (a, b) => b.marketValue - a.marketValue || a.name.localeCompare(b.name),
     ),
+    receipts,
     industries: buildBreakdown(securities, (row) => row.industryName ?? "業種データなし"),
     yieldBuckets: buildYieldBuckets(securities),
     monthlySeries: actualSeries.monthly,
@@ -464,6 +640,7 @@ export async function getDividendSecurityDetail(
 
 export function toDividendCsv(data: DividendDashboardData, includeForecast = true): string {
   const header = [
+    "行種別",
     "銘柄コード",
     "銘柄名",
     "業種",
@@ -475,6 +652,12 @@ export function toDividendCsv(data: DividendDashboardData, includeForecast = tru
     "予想対象年度",
     "期間基準",
     "データ状態",
+    "受取日",
+    "受取額",
+    "金額基準",
+    "受取状態",
+    "銘柄状態",
+    "取引ID",
   ];
   const escape = (value: string | number | null) => {
     const raw = value === null ? "" : String(value);
@@ -483,22 +666,56 @@ export function toDividendCsv(data: DividendDashboardData, includeForecast = tru
   };
   return [
     header.map(escape).join(","),
-    ...data.securities.map((row) =>
-      [
-        row.code,
-        row.name,
-        row.industryName,
-        row.marketValue,
-        row.quantity,
-        includeForecast ? row.forecastAnnualGross : null,
-        includeForecast ? row.forecastYieldPct : null,
-        includeForecast ? row.yieldOnCostPct : null,
-        includeForecast ? row.forecastFiscalYear : null,
-        includeForecast ? row.periodBasis : null,
-        row.dataStatus,
-      ]
-        .map(escape)
-        .join(","),
-    ),
+    ...(includeForecast
+      ? data.securities.map((row) =>
+          [
+            "forecast",
+            row.code,
+            row.name,
+            row.industryName,
+            row.marketValue,
+            row.quantity,
+            row.forecastAnnualGross,
+            row.forecastYieldPct,
+            row.yieldOnCostPct,
+            row.forecastFiscalYear,
+            row.periodBasis,
+            row.dataStatus,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+          ]
+            .map(escape)
+            .join(","),
+        )
+      : []),
+    ...data.receipts
+      .filter((receipt) => receipt.status !== "not_dividend")
+      .map((receipt) =>
+        [
+          "actual",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          receipt.date,
+          receipt.netAmount,
+          receipt.amountBasis,
+          receipt.status,
+          receipt.securityStatus,
+          receipt.transactionId,
+        ]
+          .map(escape)
+          .join(","),
+      ),
   ].join("\n");
 }

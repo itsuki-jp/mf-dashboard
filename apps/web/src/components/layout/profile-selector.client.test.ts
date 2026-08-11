@@ -33,6 +33,19 @@ describe("buildProfileSelectionPath", () => {
       "/profile--profile_b/bs",
     );
   });
+
+  it("scopeに依存しないqueryとhashを保ち、scope依存queryを削除する", () => {
+    expect(
+      buildProfileSelectionPath(
+        "/profile--profile_a/dividends",
+        "profile_b",
+        "view=yield&product=stock&year=2026&account=account-a&includeForecast=1&security=1234&granularity=monthly",
+        "#breakdown",
+      ),
+    ).toBe(
+      "/profile--profile_b/dividends?granularity=monthly&includeForecast=1&view=yield&year=2026#breakdown",
+    );
+  });
 });
 
 describe("profileIdFromSelectionValue", () => {

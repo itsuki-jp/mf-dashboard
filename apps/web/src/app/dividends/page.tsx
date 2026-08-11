@@ -1,6 +1,7 @@
-import type { DividendGranularity, DividendView } from "@mf-dashboard/db/queries/dividend";
+import type { DividendGranularity } from "@mf-dashboard/db/queries/dividend";
 import type { Metadata } from "next";
 import { DividendDashboard } from "../../components/info/dividend-dashboard";
+import type { DashboardView } from "../../components/info/dividend-dashboard.client";
 import { PageLayout } from "../../components/layout/page-layout";
 
 export const metadata: Metadata = {
@@ -19,8 +20,10 @@ function parseYear(value: string | undefined): number | undefined {
   return Number.isInteger(year) && year >= 2000 && year <= 2100 ? year : undefined;
 }
 
-function parseView(value: string | undefined): DividendView | undefined {
-  return value === "timeline" || value === "security" ? value : undefined;
+function parseView(value: string | undefined): DashboardView | undefined {
+  return value === "timeline" || value === "security" || value === "industry" || value === "yield"
+    ? value
+    : undefined;
 }
 
 function parseGranularity(value: string | undefined): DividendGranularity | undefined {
@@ -31,13 +34,17 @@ function serializeSearchParams(
   searchParams: Record<string, string | string[] | undefined> | undefined,
 ): string {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(searchParams ?? {})) {
-    if (Array.isArray(value)) {
-      for (const item of value) params.append(key, item);
-    } else if (value !== undefined) {
-      params.set(key, value);
-    }
-  }
+  const year = parseYear(first(searchParams?.year));
+  const view = parseView(first(searchParams?.view)) ?? "security";
+  const granularity = parseGranularity(first(searchParams?.granularity)) ?? "month";
+  const includeForecast = first(searchParams?.includeForecast) !== "0";
+  const security = first(searchParams?.security)?.trim().toUpperCase();
+  // Keep the browser URL deterministic so it remains suitable for refresh, back, and sharing.
+  params.set("granularity", granularity);
+  params.set("includeForecast", includeForecast ? "1" : "0");
+  if (security) params.set("security", security);
+  params.set("view", view);
+  if (year) params.set("year", String(year));
   return params.toString();
 }
 
