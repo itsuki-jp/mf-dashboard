@@ -64,7 +64,7 @@ describe("dividend query helpers", () => {
       securities: [
         {
           code: "7203",
-          name: 'Company "A"',
+          name: '=Company "A"',
           industryName: null,
           marketValue: 100000,
           quantity: 10,
@@ -85,6 +85,6 @@ describe("dividend query helpers", () => {
       sourceAsOf: null,
     };
 
-    expect(toDividendCsv(data)).toContain('"Company ""A"""');
+    expect(toDividendCsv(data)).toContain('"\'=Company ""A"""');
   });
 });

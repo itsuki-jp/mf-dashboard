@@ -393,7 +393,7 @@ export async function getDividendDashboardData(
     securities: securities.sort(
       (a, b) => b.marketValue - a.marketValue || a.name.localeCompare(b.name),
     ),
-    industries: buildBreakdown(securities, (row) => row.industryName),
+    industries: buildBreakdown(securities, (row) => row.industryName ?? "業種データなし"),
     yieldBuckets: buildYieldBuckets(securities),
     monthlySeries: actualSeries.monthly,
     yearlySeries: actualSeries.yearly,
