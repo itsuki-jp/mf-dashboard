@@ -54,6 +54,8 @@ export interface CrawlerConfig {
   dbExists: boolean;
   scrapeMode: string;
   isHistoryMode: boolean;
+  /** Re-fetch existing months when explicitly requested for a data backfill. */
+  refreshHistory?: boolean;
   historyMaxMonths: number;
   isDebug: boolean;
   isHeaded: boolean;
@@ -112,6 +114,7 @@ export function loadCrawlerConfig(
   const dbExists = fileExists(dbPath);
   const scrapeMode = env.SCRAPE_MODE || (dbExists ? "month" : "history");
   const historyMaxMonths = parseHistoryMaxMonths(env.HISTORY_MAX_MONTHS);
+  const refreshHistory = env.REFRESH_HISTORY === "true";
 
   return {
     skipRefresh,
@@ -120,6 +123,7 @@ export function loadCrawlerConfig(
     dbExists,
     scrapeMode,
     isHistoryMode: scrapeMode === "history",
+    refreshHistory,
     historyMaxMonths,
     isDebug: env.DEBUG === "true",
     isHeaded: env.HEADED === "true",
@@ -131,6 +135,7 @@ function logCrawlerOptions(config: CrawlerConfig): void {
   log(`SKIP_REFRESH:   ${config.skipRefresh}`);
   info(`CLEANUP_GROUPS: ${config.cleanupGroups}`);
   log(`SCRAPE_MODE:    ${config.scrapeMode} (DB exists: ${config.dbExists})`);
+  log(`REFRESH_HISTORY: ${config.refreshHistory ?? false}`);
   log(`HISTORY_MAX_MONTHS: ${config.historyMaxMonths}`);
   log(`DEBUG:          ${config.isDebug}`);
   log(`HEADED:         ${config.isHeaded}`);
@@ -295,6 +300,7 @@ export async function runCashFlowHistoryPhase(
   profileId: string,
   page: Page,
   config: Pick<CrawlerConfig, "isHistoryMode"> & {
+    forceHistory?: boolean;
     historyMaxMonths?: CrawlerConfig["historyMaxMonths"];
   },
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
@@ -317,11 +323,13 @@ export async function runCashFlowHistoryPhase(
   const now = new Date();
   const maxMonths = config.historyMaxMonths ?? parseHistoryMaxMonths(undefined);
 
-  let monthsToFetch = 1;
-  for (let i = 1; i < maxMonths; i++) {
-    const month = getHistoryMonth(now, i);
-    if (!(await hasTransactionsForMonth(db, profileId, month))) {
-      monthsToFetch = i + 1;
+  let monthsToFetch = config.forceHistory ? maxMonths : 1;
+  if (!config.forceHistory) {
+    for (let i = 1; i < maxMonths; i++) {
+      const month = getHistoryMonth(now, i);
+      if (!(await hasTransactionsForMonth(db, profileId, month))) {
+        monthsToFetch = i + 1;
+      }
     }
   }
 

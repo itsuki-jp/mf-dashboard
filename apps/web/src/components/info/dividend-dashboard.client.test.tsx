@@ -19,6 +19,8 @@ const data: DividendDashboardData = {
   forecastFiscalYears: [2027],
   summary: {
     actualReceivedNet: 500,
+    actualReceivedConfirmedNet: 500,
+    actualReceiptUnknownCount: 0,
     forecastAnnualGross: 1_000,
     forecastRemainingGross: null,
     unknownPaymentMonthGross: 1_000,

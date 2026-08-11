@@ -215,6 +215,32 @@ async function createDividendTransaction(accountId: number, profileId = "primary
     .run();
 }
 
+async function createUnknownIncomeTransaction(accountId: number) {
+  const now = new Date().toISOString();
+  await db
+    .insert(schema.transactions)
+    .values({
+      profileId: "primary",
+      mfId: `unknown-income-${accountId}`,
+      date: "2026-07-24",
+      accountId,
+      category: null,
+      subCategory: null,
+      rawCategory: null,
+      rawSubCategory: null,
+      description: "Income requiring review",
+      amount: 5000,
+      type: "income",
+      isTransfer: false,
+      isExcludedFromCalculation: false,
+      transferTarget: null,
+      transferTargetAccountId: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+}
+
 async function createOrdinaryExpenseAndTransfer(accountId: number) {
   const now = new Date().toISOString();
   await db
@@ -422,12 +448,26 @@ describe("dividend query helpers", () => {
     expect(data.receipts.filter((receipt) => receipt.status === "not_dividend")).toHaveLength(2);
   });
 
+  it("separates the confirmed subtotal from unknown receipt rows", async () => {
+    const accountId = await createScopedStock("7203");
+    await createDividendTransaction(accountId);
+    await createUnknownIncomeTransaction(accountId);
+
+    const data = await getDividendDashboardData(TEST_GROUP_ID, { year: 2026 }, db);
+
+    expect(data.summary.actualReceivedNet).toBeNull();
+    expect(data.summary.actualReceivedConfirmedNet).toBe(12000);
+    expect(data.summary.actualReceiptUnknownCount).toBe(1);
+  });
+
   it("exports actual receipt rows with a net basis even when forecasts are excluded", () => {
     const data: DividendDashboardData = {
       year: 2026,
       forecastFiscalYears: [],
       summary: {
         actualReceivedNet: 12000,
+        actualReceivedConfirmedNet: 12000,
+        actualReceiptUnknownCount: 0,
         forecastAnnualGross: null,
         forecastRemainingGross: null,
         unknownPaymentMonthGross: null,

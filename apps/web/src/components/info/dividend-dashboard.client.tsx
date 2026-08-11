@@ -220,9 +220,24 @@ export function DividendDashboardClient({
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="今年の受取済み"
-          value={data.summary.actualReceivedNet}
-          suffix="税引後・Money Forward取引"
+          title={
+            data.summary.actualReceiptUnknownCount > 0
+              ? "今年の受取済み（確認済み）"
+              : "今年の受取済み"
+          }
+          value={
+            data.summary.actualReceivedNet ??
+            (data.summary.actualReceiptUnknownCount > 0 &&
+            data.summary.actualReceivedConfirmedNet !== null &&
+            data.summary.actualReceivedConfirmedNet > 0
+              ? data.summary.actualReceivedConfirmedNet
+              : null)
+          }
+          suffix={
+            data.summary.actualReceiptUnknownCount > 0
+              ? `Money Forward取引・未判定${data.summary.actualReceiptUnknownCount}件`
+              : "取引額（税引後相当）"
+          }
           actual
         />
         <MetricCard
@@ -349,7 +364,7 @@ export function DividendDashboardClient({
 
       <p className="text-xs text-muted-foreground">
         EDINET DB更新日時: {data.sourceAsOf ?? "未取得"}
-        。会社予想は事業年度・税引前、受取実績はMoney Forward取引の税引後基準です。
+        。会社予想は事業年度・税引前、受取実績はMoney Forward取引額（税引後相当）です。
       </p>
     </div>
   );
@@ -415,7 +430,7 @@ function ReceiptAudit({
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="px-2 py-2">受取日</th>
-                  <th className="px-2 py-2 text-right">税引後額</th>
+                  <th className="px-2 py-2 text-right">取引額（税引後相当）</th>
                   <th className="px-2 py-2">amount basis</th>
                   <th className="px-2 py-2">銘柄紐付け</th>
                   <th className="px-2 py-2">判定</th>
@@ -435,7 +450,7 @@ function ReceiptAudit({
                       )}
                     </td>
                     <td className="px-2 py-2">
-                      {receipt.amountBasis === "net" ? "税引後（net）" : "金額基準未確認"}
+                      {receipt.amountBasis === "net" ? "取引額（税引後相当）" : "金額基準未確認"}
                     </td>
                     <td className="px-2 py-2">{receiptSecurityLabel(receipt.securityStatus)}</td>
                     <td className="px-2 py-2">{receiptStatusLabel(receipt.status)}</td>

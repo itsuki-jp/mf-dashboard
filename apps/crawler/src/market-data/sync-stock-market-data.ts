@@ -263,7 +263,8 @@ async function syncOneSecurity(
   let stock: StockMarketDataInput;
   let externalSecurityId: string;
   let stockMarketDataId: number;
-  if (existingRow && isFresh(existingMapping?.lastSuccessAt, STAGE_TTL_SECONDS.mapping)) {
+  if (isFresh(existingMapping?.lastSuccessAt, STAGE_TTL_SECONDS.mapping)) {
+    if (!existingRow) return "skipped";
     stock = stockInputFromRow(existingRow);
     externalSecurityId = stock.externalSecurityId;
     stockMarketDataId = existingRow.id;

@@ -19,6 +19,8 @@ export const Default: Story = {
       forecastFiscalYears: [2026],
       summary: {
         actualReceivedNet: 60000,
+        actualReceivedConfirmedNet: 60000,
+        actualReceiptUnknownCount: 0,
         forecastAnnualGross: 180000,
         forecastRemainingGross: null,
         unknownPaymentMonthGross: 180000,
@@ -49,6 +51,8 @@ export const Unavailable: Story = {
       forecastFiscalYears: [],
       summary: {
         actualReceivedNet: null,
+        actualReceivedConfirmedNet: null,
+        actualReceiptUnknownCount: 0,
         forecastAnnualGross: null,
         forecastRemainingGross: null,
         unknownPaymentMonthGross: null,

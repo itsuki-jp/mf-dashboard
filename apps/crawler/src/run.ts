@@ -154,6 +154,7 @@ async function runProfileCrawler(
     const effectiveConfig = {
       ...config,
       isHistoryMode: historyPolicy.shouldFetchHistory,
+      forceHistory: config.refreshHistory === true || options.history === true,
     };
     const cleanupResult = config.cleanupGroups
       ? buildCleanupGroupIds(scrapeResult.groupDataList)
