@@ -7,6 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 export async function DividendSummaryCard({ groupId }: { groupId?: string }) {
   const data = await getDividendDashboardData(groupId);
   const href = groupId ? `/${encodeURIComponent(groupId)}/dividends` : "/dividends";
+  const hasUnknownReceipts = data.summary.actualReceiptUnknownCount > 0;
+  const displayedActual =
+    data.summary.actualReceivedNet ??
+    (hasUnknownReceipts &&
+    data.summary.actualReceivedConfirmedNet !== null &&
+    data.summary.actualReceivedConfirmedNet > 0
+      ? data.summary.actualReceivedConfirmedNet
+      : null);
 
   return (
     <Card href={href}>
@@ -16,19 +24,21 @@ export async function DividendSummaryCard({ groupId }: { groupId?: string }) {
       <CardContent className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
-            <p className="text-sm text-muted-foreground">今年の受取済み</p>
+            <p className="text-sm text-muted-foreground">
+              {hasUnknownReceipts ? "今年の受取済み（確認済み）" : "今年の受取済み"}
+            </p>
             <p className="mt-1">
-              {data.summary.actualReceivedNet === null ? (
+              {displayedActual === null ? (
                 <span className="font-semibold">算出不可</span>
               ) : (
-                <AmountDisplay
-                  amount={data.summary.actualReceivedNet}
-                  type="income"
-                  size="sm"
-                  weight="bold"
-                />
+                <AmountDisplay amount={displayedActual} type="income" size="sm" weight="bold" />
               )}
             </p>
+            {hasUnknownReceipts && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                未判定{data.summary.actualReceiptUnknownCount}件
+              </p>
+            )}
           </div>
           <div>
             <p className="text-sm text-muted-foreground">年間予想配当（会社予想・税引前）</p>

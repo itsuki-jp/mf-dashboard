@@ -202,6 +202,7 @@ describe("loadCrawlerConfig", () => {
       DEBUG: "true",
       HEADED: "true",
       HISTORY_MAX_MONTHS: "480",
+      REFRESH_HISTORY: "true",
       SCRAPE_MODE: "history",
       SKIP_REFRESH: "true",
     };
@@ -214,6 +215,7 @@ describe("loadCrawlerConfig", () => {
     expect(config.dbExists).toBe(true);
     expect(config.scrapeMode).toBe("history");
     expect(config.isHistoryMode).toBe(true);
+    expect(config.refreshHistory).toBe(true);
     expect(config.historyMaxMonths).toBe(480);
     expect(config.isDebug).toBe(true);
     expect(config.isHeaded).toBe(true);
@@ -280,6 +282,25 @@ describe("runSavePhase", () => {
 });
 
 describe("runCashFlowHistoryPhase", () => {
+  test("forceHistory指定時は既存月を含めて上限月数を再取得する", async () => {
+    const publishHistory = vi.fn<() => Promise<number[]>>().mockResolvedValue([]);
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+
+    await runCashFlowHistoryPhase(
+      {} as never,
+      "primary",
+      {} as never,
+      { isHistoryMode: true, forceHistory: true, historyMaxMonths: 3 },
+      undefined,
+      undefined,
+      publishHistory,
+    );
+
+    expect(scrapeCashFlowHistory).toHaveBeenCalledWith({}, 3, expect.anything());
+    expect(hasTransactionsForMonth).not.toHaveBeenCalled();
+    expect(publishHistory).toHaveBeenCalledWith([]);
+  });
+
   test("初期 navigation 失敗を対象月 step に記録する", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-history-setup-failure-"));
     try {

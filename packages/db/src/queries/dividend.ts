@@ -69,6 +69,8 @@ export interface DividendDashboardData {
   forecastFiscalYears: number[];
   summary: {
     actualReceivedNet: number | null;
+    actualReceivedConfirmedNet: number | null;
+    actualReceiptUnknownCount: number;
     forecastAnnualGross: number | null;
     forecastRemainingGross: number | null;
     unknownPaymentMonthGross: number | null;
@@ -521,10 +523,15 @@ export async function getDividendDashboardData(
   const hasUnknownReceipts = receipts.some(
     (receipt) => receipt.status === "unavailable" || receipt.status === "ambiguous",
   );
-  const actualReceivedNet =
-    transactionRows.length === 0 || hasUnknownReceipts
+  const actualReceiptUnknownCount = receipts.filter(
+    (receipt) => receipt.status === "unavailable" || receipt.status === "ambiguous",
+  ).length;
+  const actualReceivedConfirmedNet =
+    transactionRows.length === 0
       ? null
       : matched.reduce((sum, receipt) => sum + (receipt.netAmount ?? 0), 0);
+  const actualReceivedNet =
+    transactionRows.length === 0 || hasUnknownReceipts ? null : actualReceivedConfirmedNet;
   const coveredRows = securities.filter((row) => row.dataStatus === "covered");
   const totalStockMarketValue = securities.reduce((sum, row) => sum + row.marketValue, 0);
   const coveredMarketValue = coveredRows.reduce((sum, row) => sum + row.marketValue, 0);
@@ -553,6 +560,8 @@ export async function getDividendDashboardData(
     forecastFiscalYears,
     summary: {
       actualReceivedNet,
+      actualReceivedConfirmedNet,
+      actualReceiptUnknownCount,
       forecastAnnualGross,
       forecastRemainingGross: actualAndForecastComparable ? forecastAnnualGross : null,
       unknownPaymentMonthGross: forecastAnnualGross,

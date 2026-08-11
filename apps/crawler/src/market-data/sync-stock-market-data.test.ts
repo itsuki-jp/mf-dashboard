@@ -142,6 +142,33 @@ describe("syncStockMarketData", () => {
     });
   });
 
+  it("does not retry a fresh negative mapping result when no market row exists", async () => {
+    db = await createTestDb();
+    await createHolding(db);
+    const timestamp = new Date().toISOString();
+    await db.insert(schema.marketDataSyncStatuses).values({
+      source: "edinetdb",
+      normalizedCode: "7203",
+      stage: "mapping",
+      status: "empty",
+      errorCode: "unresolved",
+      lastAttemptedAt: timestamp,
+      lastSuccessAt: timestamp,
+      nextAllowedAt: null,
+      ttlSeconds: 30 * 24 * 60 * 60,
+      asOf: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const { client, findCompaniesBySecurityCode, getCompany, getFinancials } = createClient(null);
+
+    await syncStockMarketData(db, client);
+
+    expect(findCompaniesBySecurityCode).not.toHaveBeenCalled();
+    expect(getCompany).not.toHaveBeenCalled();
+    expect(getFinancials).not.toHaveBeenCalled();
+  });
+
   it("uses the provider adjusted DPS only for a consistent pre_split forecast", async () => {
     db = await createTestDb();
     await createHolding(db);
