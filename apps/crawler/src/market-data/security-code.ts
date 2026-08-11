@@ -1,8 +1,4 @@
-type SecurityCodeResolutionStatus =
-  | "resolved"
-  | "unsupported"
-  | "unresolved"
-  | "ambiguous_match";
+type SecurityCodeResolutionStatus = "resolved" | "unsupported" | "unresolved" | "ambiguous_match";
 
 export interface SecurityCodeCandidate {
   edinet_code: string;

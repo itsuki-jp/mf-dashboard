@@ -41,8 +41,9 @@ describe("syncStockMarketData", () => {
       isActive: true,
     });
 
-    const client = {
-      findCompaniesBySecurityCode: vi.fn().mockResolvedValue([
+    const findCompaniesBySecurityCode = vi
+      .fn<EdinetDbClient["findCompaniesBySecurityCode"]>()
+      .mockResolvedValue([
         {
           edinet_code: "E00001",
           sec_code: "7203",
@@ -51,36 +52,40 @@ describe("syncStockMarketData", () => {
           listing_status: "listed",
           is_delisted: false,
         },
-      ]),
-      getCompany: vi.fn().mockResolvedValue({
-        edinet_code: "E00001",
-        sec_code: "7203",
-        name: "Company A",
-        industry: "Transport",
-        listing_status: "listed",
-        forecast_doe: {
-          forecast_dividend_per_share: 100,
-          forecast_fiscal_year: 2099,
-          source_disclosure_date: "2099-01-01",
-          source_quarter: "Q3",
-        },
-      }),
-      getFinancials: vi.fn().mockResolvedValue([
-        {
-          fiscal_year: 2098,
-          dividend_per_share: 90,
-          adjusted_dividend_per_share: null,
-          submit_date: "2099-01-01",
-        },
-      ]),
+      ]);
+    const getCompany = vi.fn<EdinetDbClient["getCompany"]>().mockResolvedValue({
+      edinet_code: "E00001",
+      sec_code: "7203",
+      name: "Company A",
+      industry: "Transport",
+      listing_status: "listed",
+      forecast_doe: {
+        forecast_dividend_per_share: 100,
+        forecast_fiscal_year: 2099,
+        source_disclosure_date: "2099-01-01",
+        source_quarter: "Q3",
+      },
+    });
+    const getFinancials = vi.fn<EdinetDbClient["getFinancials"]>().mockResolvedValue([
+      {
+        fiscal_year: 2098,
+        dividend_per_share: 90,
+        adjusted_dividend_per_share: null,
+        submit_date: "2099-01-01",
+      },
+    ]);
+    const client = {
+      findCompaniesBySecurityCode,
+      getCompany,
+      getFinancials,
     } as unknown as EdinetDbClient;
 
     await syncStockMarketData(db, client);
     await syncStockMarketData(db, client);
 
-    expect(client.findCompaniesBySecurityCode).toHaveBeenCalledTimes(1);
-    expect(client.getCompany).toHaveBeenCalledTimes(1);
-    expect(client.getFinancials).toHaveBeenCalledTimes(1);
+    expect(findCompaniesBySecurityCode).toHaveBeenCalledTimes(1);
+    expect(getCompany).toHaveBeenCalledTimes(1);
+    expect(getFinancials).toHaveBeenCalledTimes(1);
     expect((await db.select().from(schema.stockMarketData).all()).length).toBe(1);
     expect((await db.select().from(schema.stockDividendHistory).all()).length).toBe(1);
   });

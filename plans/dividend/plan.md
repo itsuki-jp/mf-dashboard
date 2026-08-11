@@ -4,6 +4,8 @@
 
 ## Latest implementation cycle
 
+- CI修正サイクルを開始した。PR #18のCIログで、Crawlerのformat/lint警告、opsバックアップテストの時刻依存、static demo export時の配当ページ`searchParams`動的アクセスを確認した。まずformat/lint警告と型の明確化をatomic commitし、次にstatic demo対応、最後にopsテストの決定性を修正する。
+- CI修正サイクル1では、`security-code.ts`をoxfmtで整形し、Crawlerのtyped mockとgroup配当ページの明示的props型でlint/typecheck警告を解消した。対象Crawler test 1件、`pnpm turbo typecheck` 8 packages、oxlint 545 files、対象format checkを通過した。
 - Sol mediumの実装レビュー（Euler）で確認した、FY会社予想と暦年実績の表示混同、旧migration未適用DBの詳細画面、予想表示切替のCSV/UI不整合、同期失敗時の最終成功時刻消失を修正した。
 - 配当ページは実績暦年と会社予想FYを見出し・KPI・CSVで明示的に分離し、`includeForecast=1|0`をURLへ反映する。銘柄詳細リンクは既存queryを保持する。
 - 予想非表示時の画面内CSVは予想列を空欄にし、CSVセルのformula injectionを無害化する。業種・利回りの不明値は`データなし`へまとめる。
