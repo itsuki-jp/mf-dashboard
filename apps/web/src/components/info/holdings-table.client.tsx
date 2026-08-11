@@ -15,6 +15,13 @@ import { Pagination } from "../ui/pagination";
 import { useHoldingsFilter } from "./unrealized-gain-card.client";
 
 const PAGE_SIZE = 10;
+type StockView = "security" | "industry" | "yield";
+
+interface StockBreakdownRow {
+  label: string;
+  value: number;
+  ratio: number;
+}
 
 interface HoldingItem {
   id: number;
@@ -30,6 +37,9 @@ interface HoldingItem {
   avgCostPrice: number | null;
   quantity: number | null;
   unitPrice: number | null;
+  code?: string | null;
+  industryName?: string | null;
+  forecastYieldPct?: number | null;
 }
 
 interface CategoryGroup {
@@ -56,6 +66,53 @@ function sortCategoryGroups(categories: readonly CategoryGroup[]): CategoryGroup
     })),
     (group) => group.total,
     (group) => group.category,
+  );
+}
+
+function getYieldBucket(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "データなし";
+  if (value < 2) return "0〜2%";
+  if (value < 3) return "2〜3%";
+  if (value < 4) return "3〜4%";
+  if (value < 5) return "4〜5%";
+  return "5%以上";
+}
+
+function buildStockBreakdown(
+  items: HoldingItem[],
+  view: Exclude<StockView, "security">,
+): StockBreakdownRow[] {
+  const labels =
+    view === "industry"
+      ? ["業種データなし"]
+      : ["0〜2%", "2〜3%", "3〜4%", "4〜5%", "5%以上", "データなし"];
+  const amounts = new Map(labels.map((label) => [label, 0]));
+  for (const item of items) {
+    const label =
+      view === "industry"
+        ? (item.industryName ?? "業種データなし")
+        : getYieldBucket(item.forecastYieldPct);
+    amounts.set(label, (amounts.get(label) ?? 0) + (item.amount ?? 0));
+  }
+  const total = items.reduce((sum, item) => sum + (item.amount ?? 0), 0);
+  return [...amounts.entries()]
+    .filter(([, value]) => value > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([label, value]) => ({ label, value, ratio: total > 0 ? (value / total) * 100 : 0 }));
+}
+
+function StockBreakdownList({ rows }: { rows: StockBreakdownRow[] }) {
+  return (
+    <div className="mt-3 space-y-1.5 text-xs">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center justify-between gap-2">
+          <span className="truncate">{row.label}</span>
+          <span className="shrink-0 tabular-nums text-muted-foreground">
+            {formatCurrency(row.value)} · {formatPercent(row.ratio)}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -141,6 +198,7 @@ function CategoryCard({
   hideAccountName: boolean;
 }) {
   const [currentPage, setCurrentPage] = useState(0);
+  const [stockView, setStockView] = useState<StockView>("security");
   const scrollTargetRef = useRef<HTMLDivElement>(null);
   const totalPages = Math.ceil(items.length / PAGE_SIZE);
   const lastPage = Math.max(0, totalPages - 1);
@@ -155,11 +213,18 @@ function CategoryCard({
   // Colors are generated for all items (for chart consistency)
   const colors = getChartColorArray(items.length);
 
-  const chartData = items.map((item, i) => ({
-    name: item.profileName ? `${item.name}（${item.profileName}）` : item.name,
-    value: item.amount || 0,
-    color: colors[i],
-  }));
+  const chartData =
+    stockView === "security"
+      ? items.map((item, i) => ({
+          name: item.profileName ? `${item.name}（${item.profileName}）` : item.name,
+          value: item.amount || 0,
+          color: colors[i],
+        }))
+      : buildStockBreakdown(items, stockView).map((row, index) => ({
+          name: row.label,
+          value: row.value,
+          color: colors[index % Math.max(colors.length, 1)],
+        }));
 
   // Paginate items for the list display
   const startIndex = visiblePage * PAGE_SIZE;
@@ -178,6 +243,36 @@ function CategoryCard({
         </div>
         <AmountDisplay amount={categoryTotal} weight="bold" />
       </div>
+
+      {category === "株式(現物)" && (
+        <div
+          className="flex flex-wrap gap-1 border-b px-4 py-2"
+          role="tablist"
+          aria-label="株式表示軸"
+        >
+          {(
+            [
+              ["security", "銘柄別"],
+              ["industry", "業種別"],
+              ["yield", "配当利回り別"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={stockView === value}
+              onClick={() => setStockView(value)}
+              className={cn(
+                "rounded-md border px-3 py-1.5 text-sm",
+                stockView === value ? "bg-primary text-primary-foreground" : "hover:bg-muted",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Chart + Legend area */}
       <div className="flex flex-col sm:flex-row sm:items-start gap-6 p-4">
@@ -208,6 +303,9 @@ function CategoryCard({
               />
             </PieChart>
           </ResponsiveContainer>
+          {stockView !== "security" && (
+            <StockBreakdownList rows={buildStockBreakdown(items, stockView)} />
+          )}
         </div>
 
         {/* Holdings list */}

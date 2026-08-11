@@ -1,6 +1,6 @@
 # 配当・分配分析機能 実装計画
 
-ステータス: 実装中 / DB・EDINET同期基盤完了 / 配当query・UI未完了 / Sol medium最終確認OK
+ステータス: MVP実装済み / DB・EDINET同期・配当query・ホーム・資産3軸・配当ページ完了 / HTTP CSV・口座/商品filter・runtime・受入は未完了
 
 ## Integrated baseline and source documents
 
@@ -40,7 +40,7 @@ Phase 0が未完でもUIを先に作る場合は、画面に実額を表示す�
 - ホームは `apps/web/src/app/page.tsx:14-29` の `DashboardContent` が `PageLayout`、`AssetBreakdownChart`、`MonthlyBalanceCard`、`DailyChangeCard`、`AssetHistoryChart`、`MonthlyIncomeExpenseChart` を組み立てている。
 - 資産画面は `apps/web/src/app/bs/page.tsx:15-27` の `BSContent` が `BalanceSheetChart`、`AssetHistoryChart`、`UnrealizedGainCard`、`HoldingsTable type="asset"`、`HoldingsTable type="liability"` を組み立てている。
 - 保有資産の表示は `apps/web/src/components/info/holdings-table.tsx:29-143` と `holdings-table.client.tsx` に分かれている。サーバー側で最新値を取得し、クライアント側でカテゴリ別の円グラフ、銘柄一覧、展開行、ページング、共通フィルターを表示している。
-- 現在のサイドバーは `apps/web/src/components/layout/sidebar.tsx:32-63`、ルート判定は `apps/web/src/lib/url.ts:1-62` にあり、`/dividends` はまだ既知パスに含まれない。
+- 現在のサイドバーは `apps/web/src/components/layout/sidebar.tsx`、ルート判定は `apps/web/src/lib/url.ts` にあり、`/dividends` と`/[groupId]/dividends`を既知パス・サイドバーへ追加済み。
 - グループ別ルートは `apps/web/src/app/[groupId]/bs/page.tsx` のように、ルートページのContent関数を再利用する構成である。新規ページもルートとグループ別の両方を用意する。
 
 ### Money Forward取得・DB
@@ -48,7 +48,7 @@ Phase 0が未完でもUIを先に作る場合は、画面に実額を表示す�
 - 株式は `apps/crawler/src/scrapers/portfolio.ts:441-487` で `.table-eq` から銘柄名、銘柄コード、口座、評価額、数量、平均取得単価、現在単価、前日比、含み損益、含み損益率を取得している。
 - 型 `packages/db/src/types.ts:59-79` の `PortfolioItem` にも銘柄コードと保有情報がある。
 - 保存は `packages/db/src/repositories/save-scraped-data.ts:286-308` で `holdings` と `holding_values` に行う。現行保存経路では配当情報を保存していない。
-- `holdings.code` は `packages/db/src/schema/schema.ts:146-176` に存在するが、最新保有値クエリ `packages/db/src/queries/holding.ts:132-184` の返却項目には `code` が含まれていない。外部データ結合の第一歩としてクエリDTOへ追加する。
+- `holdings.code` は `packages/db/src/schema/schema.ts` に存在し、最新保有値クエリ `packages/db/src/queries/holding.ts` の返却DTOへ`code`を追加済み。外部データ結合は`source + normalizedCode`で行う。
 - `holding_values` は `amount`、`quantity`、`unitPrice`、`avgCostPrice`、`dailyChange`、`unrealizedGain`、`unrealizedGainPct` のみで、配当イベント・業種・利回りはない（`packages/db/src/schema/schema.ts:198-221`）。
 - 既存の取引テーブルは `date`、`accountId`、`category`、`description`、`amount`、`type`、Money Forward IDなどを持つが、配当として正規化された種別はない（`packages/db/src/schema/schema.ts:227-245`）。
 - `CashFlowItem` は `category`、`subCategory`、`description`、`amount`、`accountName` までで、銘柄コード、税額、gross/net区分、取引statusは持たない（`packages/db/src/types.ts:35-48`）。またCrawlerのカテゴリ決定処理は保存前のcategory/subCategoryを書き換えるため、配当分類に使うMoney Forward由来のraw値を先に保全する必要がある（`apps/crawler/src/category-decision/categorize-cash-flow.ts:58-85`、`apps/crawler/src/crawler-phases.ts:242-260,387-406`）。

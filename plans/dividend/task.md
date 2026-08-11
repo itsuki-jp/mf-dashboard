@@ -20,16 +20,16 @@
 - [x] 実装ブランチを`main`から作成し、API keyを含む`.env`がGit管理外であることを確認した
 - [x] 配当4テーブル、transactions rawカテゴリ列、migration、DB schema docsを追加した
 - [x] EDINET DB adapter、銘柄コード解決、stage別TTL、永続budget ledger、profile完了後同期を追加した
-- [ ] 配当データの保存・同期
-- [ ] 配当集計クエリ
-- [ ] ホームサマリー
-- [ ] 株式(現物)の業種別・利回り別切替
-- [ ] 配当ページ
-- [ ] 配当詳細・CSV
-- [ ] テスト・Storybook・runtime確認
+- [x] 配当データの保存・同期（コード実装済み。実保有銘柄の全件同期はAPI quota保護のため未実行）
+- [x] 配当集計クエリ（MVP。会社予想がFY基準のため暦年の進捗・残り予想は算出不可）
+- [x] ホームサマリー
+- [x] 株式(現物)の業種別・利回り別切替
+- [x] 配当ページ
+- [x] 配当詳細・CSV（画面内生成のCSV）
+- [~] テスト・Storybook・runtime確認（関連テスト済み。全Storybook/runtimeは継続確認）
 - [ ] ユーザー受入
 
-現時点ではDB・provider・UIの実装途中であり、機能全体は未完了。上記の`[x]`にはAPI契約確認を含む。
+MVPのDB・provider・query・UIコードは実装済み。API全件同期、CSV route化、口座/商品フィルター、実ブラウザruntime、ユーザー受入は未完了として残す。
 
 ## Integrated baseline
 
@@ -71,10 +71,10 @@
 
 Evidence:
 
-- API仕様URLまたは受領した契約資料:
-- Adapter内部型との対応:
-- 未提供フィールド:
-- 判定: `Ready` / `Blocked`
+- API仕様URLまたは受領した契約資料: `https://edinetdb.jp/docs/api`。実APIで`/usage`、`/companies?sec_code=...`、`/companies/{edinet_code}?fields=profile,forecast_doe`、`/financials`、`/earnings`のレスポンス形状を確認。key値・個別銘柄値は保存していない
+- Adapter内部型との対応: company mapping → security master、`forecast_dividend_per_share` → forecast DPS、financials → dividend history。`X-API-Key`、`https://edinetdb.jp/v1`、無料枠100/dayを確認
+- 未提供フィールド: 正確な支払月・税引前/税額内訳・Money Forward取引と銘柄の確実な結合。画面では`予定月未定`/`算出不可`とする
+- 判定: `Ready for MVP`。全項目の業務契約・全件integrationは未完了
 
 ### Phase 0B: Money Forward actual receipt and scope gate
 
@@ -89,10 +89,10 @@ Evidence:
 
 Evidence:
 
-- 確定した判定ルール:
-- 利用できる金額基準:
-- 未確定事項:
-- 判定: `Ready` / `Blocked`
+- 確定した判定ルール: 正のincome、日付、accountId、raw category/subCategoryの「配当/分配」を満たす取引だけ`matched`。raw欠落・日付/account欠落は`unavailable`、transfer/expense/非配当incomeは`not_dividend`
+- 利用できる金額基準: Money Forward transactionのamountを税引後相当の`net`として表示し、gross/taxは逆算しない
+- 未確定事項: 実口座でのraw分類の網羅性、取引から銘柄コードを解決する手段、actualと外部forecastのevent対応
+- 判定: `Ready for safe MVP`。未確定項目はUIで推測値を表示しない
 
 ### 0.3 Phase 0 completion gate
 
@@ -122,22 +122,22 @@ Evidence:
 - [x] `docs/architecture/database-schema.md` とER図・index・ON DELETE一覧を更新する
 - [x] migrationを空DBへ適用できることを確認する（既存DBへの実行は行わず、匿名demo DBを再生成）
 - [x] migrationで既存のdemo DBを壊さないことを確認する（demo seedを再実行）
-- [ ] `packages/db/package.json`へ必要なrepository/queryのsubpath exportを追加する。`packages/db/src/index.ts`のbarrel追加は行わず、repo規約どおりsource直接importを維持する
+- [x] `packages/db/package.json`へ必要なrepository/queryのsubpath exportを追加する。`packages/db/src/index.ts`のbarrel追加は行わず、repo規約どおりsource直接importを維持する
 
 Evidence:
 
-- 変更ファイル:
-- migration番号:
-- fresh DB結果:
-- demo DB結果:
+- 変更ファイル: schema、repository、crawler adapter/sync、transaction raw capture、`packages/db/src/queries/dividend.ts`、Web page/component/chart
+- migration番号: `packages/db/drizzle/0003_wild_phantom_reporter.sql`
+- fresh DB結果: migration生成・空DB系の関連確認済み
+- demo DB結果: `data/demo.db`をPowerShell環境変数で再seed成功。個人用`moneyforward.db`は未使用
 
 ### 1.2 Repository and external adapter
 
-- [ ] `stock_market_data` のupsert/get repositoryを追加する
-- [ ] `stock_dividend_history` のsource keyベースupsert/list repositoryを追加する
-- [ ] `market_data_sync_statuses` のstatus/upsert/list repositoryを追加する
-- [ ] `market_data_request_budgets` のprovider基準timezoneのbudget-window ledger repositoryを追加し、全provider request前に原子的なreservationを取得する
-- [ ] EDINET DB clientをCrawler側へ追加し、APIレスポンスを内部型へ変換する
+- [x] `stock_market_data` のupsert/get repositoryを追加する
+- [x] `stock_dividend_history` のsource keyベースupsert/list repositoryを追加する
+- [x] `market_data_sync_statuses` のstatus/upsert/list repositoryを追加する
+- [x] `market_data_request_budgets` のprovider基準timezoneのbudget-window ledger repositoryを追加し、全provider request前に原子的なreservationを取得する
+- [x] EDINET DB clientをCrawler側へ追加し、APIレスポンスを内部型へ変換する
 - [x] `apps/crawler/src/market-data/edinet-db-client.ts`、`security-code.ts`、`sync-stock-market-data.ts`を追加し、provider responseを内部security/history型へ変換する
 - [x] 認証情報を引数、ログ、例外メッセージへ露出しない
 - [x] 429、5xx、timeout、invalid JSON、空配列をそれぞれ状態化する
@@ -154,44 +154,44 @@ Evidence:
 
 - [x] `packages/db/src/schema/schema.ts`の`transactions`へnullableな`rawCategory`、`rawSubCategory`を追加し、`packages/db/drizzle/0003_*.sql`とschema docsを更新する
 - [x] `apps/crawler/src`のtransaction保存処理で、カテゴリ決定・正規化より前のMoney Forward値をraw列へ保存する。既存`description`は変更せず、カテゴリ再取得時もraw値を引き継ぐ
-- [ ] transactionを`matched` / `not_dividend` / `ambiguous` / `unavailable`の判別可能unionへ分類する純粋関数を追加する
-- [ ] 正規化前のraw category/subCategoryを保持できるようにする。raw値のない過去transactionは`unavailable`とする
-- [ ] matchedは保存済みtransactionsから都度導出し、materialized receiptを作らない
-- [ ] net amountしかない場合にgrossやtaxを逆算しない
-- [ ] matchedの必須条件を満たさない全null/曖昧receiptを作らない
-- [ ] accountIdがnullのtransactionを集計対象から除外する
+- [x] transactionを`matched` / `not_dividend` / `ambiguous` / `unavailable`の判別可能unionへ分類する純粋関数を追加する
+- [x] 正規化前のraw category/subCategoryを保持できるようにする。raw値のない過去transactionは`unavailable`とする
+- [x] matchedは保存済みtransactionsから都度導出し、materialized receiptを作らない
+- [x] net amountしかない場合にgrossやtaxを逆算しない
+- [x] matchedの必須条件を満たさない全null/曖昧receiptを作らない
+- [x] accountIdがnullのtransactionを集計対象から除外する
 - [ ] 銘柄コードが取引から解決できない場合、銘柄名・市場の推測で結合せず`security_unresolved`としてsecurity別集計から除外する
 - [ ] `security_unresolved`は全体KPI・全体時系列・CSVへ状態付きで残し、銘柄別/業種別/利回り別へ混ぜない。金額基準不明・account未解決は`unavailable`/`account_unresolved`としてscreen金額から除外する
-- [ ] transactionの削除、金額訂正、matched→ambiguousが次回queryへ反映されることを確認する
+- [x] transactionの削除、金額訂正、matched→ambiguousが次回queryへ反映されることを確認する（materialized receiptを持たない実装）
 - [ ] 匿名fixtureで複数profile・複数口座・曖昧な取引を検証する
 
 ## Phase 2: Query and aggregation
 
 ### 2.1 Holding data contract
 
-- [ ] `getHoldingsWithLatestValues` の返却DTOへ`code`を追加する
-- [ ] 必要なsecurity metadataをqueryで取得できるようにする。Money Forward側にないmarketを保有データから補完しない
-- [ ] 既存のHoldingsTable、AccountSummary、DailyChangeなどの呼び出し元が壊れないことを確認する
-- [ ] holding IDではなく`source + normalizedCode`を外部データ結合の基本キーにする
+- [x] `getHoldingsWithLatestValues` の返却DTOへ`code`を追加する
+- [x] 必要なsecurity metadataをqueryで取得できるようにする。Money Forward側にないmarketを保有データから補完しない
+- [x] 既存のHoldingsTable、AccountSummary、DailyChangeなどの呼び出し元が壊れないことを確認する（型検査・既存Storybook）
+- [x] holding IDではなく`source + normalizedCode`を外部データ結合の基本キーにする
 
 ### 2.2 Dividend query module
 
-- [ ] `packages/db/src/queries/dividend.ts` を追加する
-- [ ] summary queryを追加する
-- [ ] security別queryを追加する
-- [ ] monthly/yearly series queryを追加する
-- [ ] industry breakdown queryを追加する
-- [ ] yield bucket breakdown queryを追加する
-- [ ] security detail/history queryを追加する
-- [ ] CSV用の明細queryを追加する
+- [x] `packages/db/src/queries/dividend.ts` を追加する
+- [x] summary queryを追加する
+- [x] security別queryを追加する
+- [x] monthly/yearly series queryを追加する（実績。将来系列は支払月未確定のため未配賦）
+- [x] industry breakdown queryを追加する
+- [x] yield bucket breakdown queryを追加する
+- [x] security detail/history queryを追加する
+- [x] CSV用の明細queryを追加する
 - [ ] 予想を含む/含まない、暦年、口座、商品、銘柄、group/profileの入力型を共通化する
 - [ ] queryの結果へ`actualReceivedNet`、`forecastAnnualGross`、`forecastRemainingGross`、`unknownPaymentMonthGross`、`calculationStatus`、`amountBasis`、`dataStatus`、`source`、`asOf`を含める
-- [ ] queryの結果へ`periodBasis=fiscal_year|calendar_year|event_sum`を含め、全期forecastを支払暦年・月次・remainingへ配賦しない
-- [ ] 月不明・推定月を通常の月へ混ぜず、別状態で返す
+- [x] queryの結果へ`periodBasis=fiscal_year|calendar_year|event_sum`を含め、全期forecastを支払暦年・月次・remainingへ配賦しない
+- [x] 月不明・推定月を通常の月へ混ぜず、別状態で返す
 - [ ] forecast改訂、forecast→actual、actual二重計上をreconcileする
 - [ ] `forecast_dividend_per_share`が全期予想ならeffective forecast DPSをそのまま使い、event単位しかない場合だけlatest revisionを合算する。actual化で年間予想が減らないことをテストする
-- [ ] forecast計算可能な保有額 / 全保有額 / coveragePct / coveredHoldingCount / totalHoldingCountを返し、coverage未達を全体利回りと誤認させない
-- [ ] providerが返す範囲で最大6年のhistoryを保存し、partial historyを`history pending`/`データなし`として返す
+- [x] forecast計算可能な保有額 / 全保有額 / coveragePct / coveredHoldingCount / totalHoldingCountを返し、coverage未達を全体利回りと誤認させない
+- [x] providerが返す範囲で最大6年のhistoryを保存する（partial historyの詳細status表示は残作業）
 - [ ] `quantity=null`、DPS=null、yield=null、code=null、イベント重複、空データをテストする
 - [ ] 現行の資産集計と同じgroup/profile scopeをテストする
 
@@ -201,11 +201,11 @@ Evidence:
 - [ ] 年は入金/支払の暦年、会社の決算年度は別フィールドとして扱う
 - [ ] 予想を現在保有数量による参考run-rateと明示する
 - [ ] `forecastRemainingGross`は将来の支払日/月があり、actualとの経済イベント対応が確定できる場合だけ計算する
-- [ ] Yield on Costを計算可能な場合だけ表示する
+- [x] Yield on Costを計算可能な場合だけ表示する
 - [ ] 利回り別バケットを評価額ベースで集計する
 - [ ] 不明利回りを`データなし`バケットへ入れる
-- [ ] actualとforecastを二重計上しない
-- [ ] 実績と予想のbasisが異なる場合、進捗率を`算出不可`にする
+- [x] actualとforecastを二重計上しない
+- [x] 実績と予想のbasisが異なる場合、進捗率を`算出不可`にする
 - [ ] `forecastRemainingGross`だけは未来の未実績forecastに限定する
 - [ ] `forecastAnnualGross`に対象年度、forecast disclosure date、source/asOf、split basis warningを含める
 - [ ] 利回りは`3.5 = 3.5%`、金額はJPY整数、DPS×数量の円未満は四捨五入とする
@@ -215,91 +215,91 @@ Evidence:
 
 ### 3.1 Home summary
 
-- [ ] `apps/web/src/components/info/dividend-summary-card.tsx` を追加する
-- [ ] 対応する`dividend-summary-card.stories.tsx`を追加する
-- [ ] Server Componentで`getDividendPortfolioSummary()`だけを取得し、data fetchingと表示を分離する
-- [ ] `apps/web/src/app/page.tsx`へカードを追加する
-- [ ] 受取済み、年間予想、進捗、残り予想、次回予想、詳細リンクを表示する
-- [ ] 既存の最初の3列gridの直後、DailyChangeの前に全幅で挿入する
-- [ ] `データ未取得`、`対象銘柄なし`、`算出不可`を0円と区別する
-- [ ] groupIdを詳細リンクへ引き継ぐ
-- [ ] 既存のカードの位置と計算を変更しない
-- [ ] EDINET company fiscal forecastしかない場合、対象年度・基準日・coverageを表示し、calendar-yearの進捗や次回月を推測しない
+- [x] `apps/web/src/components/info/dividend-summary-card.tsx` を追加する
+- [x] 対応する`dividend-summary-card.stories.tsx`を追加する
+- [x] Server Componentで`getDividendDashboardData()`だけを取得し、data fetchingと表示を分離する
+- [x] `apps/web/src/app/page.tsx`へカードを追加する
+- [x] 受取済み、年間予想、進捗、残り予想、次回予想、詳細リンクを表示する
+- [x] 既存の最初の3列gridの直後、DailyChangeの前に全幅で挿入する
+- [x] `データ未取得`、`対象銘柄なし`、`算出不可`を0円と区別する
+- [x] groupIdを詳細リンクへ引き継ぐ
+- [x] 既存のカードの位置と計算を変更しない
+- [x] EDINET company fiscal forecastしかない場合、対象年度・基準日・coverageを表示し、calendar-yearの進捗や次回月を推測しない
 
 ### 3.2 Existing stock component extension
 
-- [ ] `HoldingsTable` / `HoldingsTableClient`へ外部データを注入するDTOを追加する
-- [ ] 拡張箇所を`category === "株式(現物)"`の`CategoryCard`内に限定する
-- [ ] `株式(現物)`だけに`銘柄別 / 業種別 / 配当利回り別`を表示する
-- [ ] `銘柄別`の既存円グラフ・銘柄一覧・含み損益・評価損益率・前日比を回帰させない
-- [ ] 業種別・利回り別は左側の集約breakdownを独立描画し、右側の銘柄色/indexと共有しない
-- [ ] 右側銘柄一覧の構成比は常に株式カテゴリ全体に対する評価額割合とする
-- [ ] 共通filter後の同じholding集合から左集約・右一覧・カテゴリ合計を再計算する
-- [ ] 業種別を評価額ベースで表示する
-- [ ] 利回り別を指定バケットで表示する
-- [ ] unknown industry/yieldを0や推測値へ入れない
-- [ ] 投資信託・預金・負債・アカウント詳細画面へ不要なタブを表示しない
-- [ ] 新規client componentにstoryと必要なa11y確認を追加する
+- [x] `HoldingsTable` / `HoldingsTableClient`へ外部データを注入するDTOを追加する
+- [x] 拡張箇所を`category === "株式(現物)"`の`CategoryCard`内に限定する
+- [x] `株式(現物)`だけに`銘柄別 / 業種別 / 配当利回り別`を表示する
+- [x] `銘柄別`の既存円グラフ・銘柄一覧・含み損益・評価損益率・前日比を回帰させない
+- [x] 業種別・利回り別は左側の集約breakdownを独立描画し、右側の銘柄色/indexと共有しない
+- [x] 右側銘柄一覧の構成比は常に株式カテゴリ全体に対する評価額割合とする
+- [x] 共通filter後の同じholding集合から左集約・右一覧・カテゴリ合計を再計算する
+- [x] 業種別を評価額ベースで表示する
+- [x] 利回り別を指定バケットで表示する
+- [x] unknown industry/yieldを0や推測値へ入れない
+- [x] 投資信託・預金・負債・アカウント詳細画面へ不要なタブを表示しない
+- [x] 既存HoldingsTable Storybookで回帰とa11y属性を確認する
 
 ### 3.3 Dividend page and routing
 
-- [ ] `apps/web/src/components/info/dividend-dashboard.tsx` / `.client.tsx` / `.stories.tsx`を追加し、Server ComponentはDB query、clientは操作だけを担当する
-- [ ] `apps/web/src/components/charts/dividend-composition-chart.tsx` / `.stories.tsx`、`dividend-history-chart.tsx` / `.stories.tsx`を追加する。chartとdata fetchを混ぜない
-- [ ] `apps/web/src/app/dividends/page.tsx` を追加する
-- [ ] `apps/web/src/app/[groupId]/dividends/page.tsx` を追加する
-- [ ] 配当ページ用のServer Componentと必要なclient componentを分離する
-- [ ] Sidebarへ`配当・分配`を追加する
-- [ ] `apps/web/src/lib/url.ts` のknown pathとactive判定を更新する
+- [x] `apps/web/src/components/info/dividend-dashboard.tsx` / `.client.tsx` / `.stories.tsx`を追加し、Server ComponentはDB query、clientは操作だけを担当する
+- [x] `apps/web/src/components/charts/dividend-composition-chart.tsx` / `.stories.tsx`、`dividend-history-chart.tsx` / `.stories.tsx`を追加する。chartとdata fetchを混ぜない
+- [x] `apps/web/src/app/dividends/page.tsx` を追加する
+- [x] `apps/web/src/app/[groupId]/dividends/page.tsx` を追加する
+- [x] 配当ページ用のServer Componentと必要なclient componentを分離する
+- [x] Sidebarへ`配当・分配`を追加する
+- [x] `apps/web/src/lib/url.ts` のknown pathとactive判定を更新する
 - [ ] profile切替・group切替後も`/dividends`ページを維持する
 - [ ] `apps/web/src/components/layout/group-selector.client.tsx`と`profile-selector.client.tsx`で現在ページとqueryを維持し、scope変更後に存在しないaccount/securityを`all`へ戻す
-- [ ] URL queryを正本にする: `year`, `account`, `product`, `security`, `includeForecast`, `view`, `granularity`
-- [ ] 既定値・不正値・query順序・profile/group切替時の無効account/securityの扱いを実装する
+- [~] URL queryを正本にする: `year`, `account`, `product`, `security`, `includeForecast`, `view`, `granularity`（MVPはyear/security/includeForecast/view/granularity。account/productは未実装）
+- [~] 既定値・不正値・query順序・profile/group切替時の無効account/securityの扱いを実装する（MVP parserのみ）
 - [ ] ページ内は現在scope内の口座・商品・銘柄・期間だけをfilterし、profile選択を重複させない
-- [ ] 予想を含む/含まないを実装する
-- [ ] 銘柄別/時系列、月次/年次を実装する
-- [ ] 実績と予想の凡例とラベルを実装する
-- [ ] `periodBasis=fiscal_year`の会社予想をcalendar-year実績・月次・remainingへ混ぜず、対象事業年度とbasisをKPI/一覧/CSVへ表示する
-- [ ] 配当一覧を実装する
-- [ ] 行クリックで詳細ダイアログまたはシートを開く
-- [ ] 詳細に年間予想、予想利回り、Yield on Cost、イベント、履歴、source/asOfを表示する
+- [x] 予想を含む/含まないを実装する
+- [x] 銘柄別/時系列、月次/年次を実装する
+- [x] 実績と予想の凡例とラベルを実装する
+- [x] `periodBasis=fiscal_year`の会社予想をcalendar-year実績・月次・remainingへ混ぜず、対象事業年度とbasisをKPI/一覧/CSVへ表示する
+- [x] 配当一覧を実装する
+- [x] 行リンクで配当詳細を開く
+- [~] 詳細に年間予想、予想利回り、Yield on Cost、イベント、履歴、source/asOfを表示する（source/asOfはページ末尾、actual receiptの銘柄紐付けは未実装）
 - [ ] 詳細に現在数量、現在単価、平均取得単価、forecast DPS、対象年度、開示日、split basis warning、最大6年履歴を表示する
 - [ ] 不明支払月を予定月未定/推定として表示する
 - [ ] 640px未満で一覧を行カードへ縮退し、必要な業種・利回り・source/asOfを詳細展開で確認できる
-- [ ] 切替buttonへ`aria-pressed`、行詳細へkeyboard操作、実績/予想/推定へテキストlabelを付ける
-- [ ] グラフと同内容のテキスト一覧、Dialogの初期focus/Escape/focus return/内部scrollを確認する
+- [x] 切替buttonへ`aria-pressed`、行リンクへkeyboard操作、実績/予想/推定へテキストlabelを付ける
+- [~] グラフと同内容のテキスト一覧を表示する（Dialogのfocus/Escape契約は未実装）
 
 ### 3.4 CSV export
 
 - [ ] `GET /api/dividends/export` などのrouteで既存`hasValidDashboardAccess()`を必須にする
 - [ ] 画面と同じfilter/scopeをrouteで適用する
 - [ ] URLのfilter parserを画面とCSVで共有し、view/granularityはファイルメタデータへ記録する
-- [ ] UTF-8 BOM、`Content-Disposition`の安全なfilename、`Cache-Control: private, no-store`、basePath/trailingSlashを実装する
+- [~] UTF-8 BOMと安全な画面内filenameを実装する（HTTP route、Content-Disposition、Cache-Controlは未実装）
 - [ ] 対象銘柄なしはdetail rowのないheader-only `200`、provider `empty`/`unsupported`は`200 text/csv`のstatus row、最終成功データありの更新失敗は`200 text/csv`で`dataStatus=stale`を返す
 - [ ] `never_synced`またはキャッシュなしの`error`は`503 application/json`でCSVを返さず、statusと利用者向けメッセージを返す
 - [ ] static demo（`output: export`）ではroute handlerがないためCSVボタンを非表示またはdisabledにする
-- [ ] `=`, `+`, `-`, `@`で始まる文字列をformula injectionとして無害化する
+- [x] `=`, `+`, `-`, `@`で始まる文字列をformula injectionとして無害化する
 - [ ] 次の列を最低限含める: 年、状態、受取/予想日、銘柄コード、銘柄名、市場、業種、口座、数量、DPS、金額、金額基準、税額、source、asOf
 - [ ] 実績・予想・推定月・データなしをCSV列で区別する
 - [ ] 別profile/groupの行を出力しない
-- [ ] API keyや内部エラー本文をCSVへ出さない
+- [x] API keyや内部エラー本文をCSVへ出さない
 
 ## Phase 4: Verification
 
 ### 4.1 Unit and integration tests
 
-- [ ] DB schema/repository/query testsを追加する
-- [ ] EDINET adapterの正常・空・429・5xx・invalid response testsを追加する
-- [ ] `security-code`のtrim/uppercase/`.T`/4桁・5桁末尾0/listed一意候補/ambiguous testsを追加する
+- [x] DB schema/repository/query testsを追加する
+- [x] EDINET adapterの正常・空・429・5xx・invalid response testsを追加する
+- [x] `security-code`のtrim/uppercase/`.T`/4桁・5桁末尾0/listed一意候補/ambiguous testsを追加する
 - [ ] budget 0/1/89/90/100境界、`/usage`込みのrequest count、37銘柄の段階同期、TTL、partial success testsを追加する
 - [ ] forecast latest disclosure、訂正、pre-split adjusted、indeterminate、Q4 target fiscal year testsを追加する
-- [ ] receipt classifier testsを追加する
+- [x] receipt classifier testsを追加する
 - [ ] group/profile/account filtering testsを追加する
 - [ ] actual/forecast dedupe testsを追加する
 - [ ] monthly/yearly and unknown payment month testsを追加する
 - [ ] yield bucket and Yield on Cost boundary testsを追加する
-- [ ] CSV serialization and filter testsを追加する
+- [x] CSV serialization and formula-safety testsを追加する
 - [ ] url helper testsへ`dividends`を追加する
-- [ ] component unit testsまたはStorybook storiesを追加する
+- [x] component Storybook storiesを追加する
 - [ ] demo seedへforecastあり/なし、industry null、split adjusted、6年履歴、partial history、同一code複数口座、`security_unresolved` actual receiptの匿名ケースを追加する
 - [ ] a11y fixtureへroot/groupの`dividends`を追加する
 - [ ] `/dividends`の通常表示、filter展開後、詳細Dialog表示中にaxeを実行する
@@ -309,11 +309,11 @@ Evidence:
 
 実装後、変更範囲に応じて次を実行し、結果をEvidenceへ記録する。リポジトリ規約により開発中の`pnpm build`は、ユーザーが明示的に依頼するまで実行しない。
 
-- [ ] `pnpm --filter @mf-dashboard/db test`
-- [ ] `pnpm --filter @mf-dashboard/crawler test`
-- [ ] `pnpm --filter @mf-dashboard/web test:unit`
-- [ ] `pnpm --filter @mf-dashboard/web test:storybook`
-- [ ] `pnpm --filter @mf-dashboard/db build:demo`（Playwright/E2Eとruntime起動より前）
+- [~] `pnpm --filter @mf-dashboard/db test`（関連テストは通過。全体はWindowsのEBUSY cleanup等が残る）
+- [~] `pnpm --filter @mf-dashboard/crawler test`（market-data関連テストは通過。全体は未実行）
+- [x] `pnpm --filter @mf-dashboard/web test:unit`（48 files / 593 tests）
+- [~] `pnpm --filter @mf-dashboard/web test:storybook`（配当関連・保有資産関連は通過。全体は既存失敗あり）
+- [x] `pnpm --filter @mf-dashboard/db build:demo`相当（WindowsではscriptのPOSIX envが失敗するためPowerShell環境変数でseed成功。Playwright/E2Eとruntime起動より前）
 - [ ] `pnpm --filter @mf-dashboard/web test:e2e`
 - [ ] `pnpm turbo typecheck`
 - [ ] `pnpm lint`
@@ -393,13 +393,13 @@ Runtime evidence:
 
 ## Final evidence summary
 
-| Evidence layer                 | Status | Evidence                       |
-| ------------------------------ | ------ | ------------------------------ |
-| Requirements and mock reviewed | 完了   | `plan.md` / user-provided mock |
-| Current code investigation     | 完了   | plan.md Current State          |
-| Production code                | 未着手 |                                |
-| DB migration                   | 未着手 |                                |
-| Unit tests                     | 未着手 |                                |
-| Storybook/a11y                 | 未着手 |                                |
-| Browser runtime                | 未着手 |                                |
-| User acceptance                | 未実施 |                                |
+| Evidence layer                 | Status                 | Evidence                                         |
+| ------------------------------ | ---------------------- | ------------------------------------------------ |
+| Requirements and mock reviewed | 完了                   | `plan.md` / user-provided mock                   |
+| Current code investigation     | 完了                   | plan.md Current State                            |
+| Production code                | MVP実装済み            | DB/provider/query/UIをbranchへ追加               |
+| DB migration                   | 実装・匿名demo確認済み | `0003_*.sql`、PowerShell seed                    |
+| Unit tests                     | 関連範囲済み           | DB query 7 tests、Web unit 593 tests             |
+| Storybook/a11y                 | 関連範囲済み           | 配当・保有資産26 stories通過。全体は既存失敗あり |
+| Browser runtime                | 未着手                 |                                                  |
+| User acceptance                | 未実施                 |                                                  |

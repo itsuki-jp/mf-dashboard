@@ -188,3 +188,62 @@ export interface ScrapedData {
   refreshResult: RefreshResult | null;
   updatedAt: string;
 }
+
+// --- Market data / dividends ---
+export type MarketDataStage = "mapping" | "forecast" | "history";
+export type MarketDataSyncStatus =
+  | "never_synced"
+  | "success"
+  | "empty"
+  | "unsupported"
+  | "error"
+  | "stale";
+export type MarketDataMappingStatus = "resolved" | "unresolved" | "ambiguous_match" | "unsupported";
+export type DividendPeriodBasis = "fiscal_year" | "calendar_year" | "event_sum";
+export type DividendStatus = "actual" | "forecast";
+export type PaymentDatePrecision = "exact" | "month_estimate" | "unknown";
+
+export interface StockMarketDataInput {
+  source: string;
+  externalSecurityId: string;
+  normalizedCode: string;
+  market: string | null;
+  name: string;
+  industryName: string | null;
+  listingStatus: string;
+  mappingStatus: MarketDataMappingStatus;
+  forecastFiscalYear: number | null;
+  forecastQuarter: string | null;
+  forecastDpsRaw: number | null;
+  forecastDpsAdjusted: number | null;
+  forecastShareBasis: string | null;
+  forecastPeriodBasis: DividendPeriodBasis | null;
+  forecastSourceDisclosureDate: string | null;
+  forecastAsOf: string | null;
+  lastMappedAt: string | null;
+  lastForecastFetchedAt: string | null;
+  lastHistoryFetchedAt: string | null;
+  lastErrorCode: string | null;
+}
+
+export interface StockDividendHistoryInput {
+  stockMarketDataId: number;
+  providerEventId: string | null;
+  economicEventKey: string;
+  eventVersionKey: string;
+  revision: number;
+  fiscalYear: number;
+  paymentYear: number | null;
+  period: string | null;
+  status: DividendStatus;
+  dpsRaw: number | null;
+  dpsAdjusted: number | null;
+  periodBasis: DividendPeriodBasis;
+  announcedAt: string | null;
+  recordDate: string | null;
+  exDate: string | null;
+  paymentDate: string | null;
+  paymentDatePrecision: PaymentDatePrecision;
+  source: string;
+  asOf: string | null;
+}
