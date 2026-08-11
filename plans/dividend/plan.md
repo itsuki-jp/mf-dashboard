@@ -1,6 +1,6 @@
 # 配当・分配分析機能 実装計画
 
-ステータス: MVP実装済み・Sol medium実装レビュー対応済み / DB・EDINET同期・配当query・ホーム・資産3軸・配当ページ完了 / HTTP CSV・口座/商品filter・runtime・受入は未完了
+ステータス: MVP実装済み・Sol medium実装レビュー対応済み・PR #18 CI green / DB・EDINET同期・配当query・ホーム・資産3軸・配当ページ完了 / HTTP CSV・口座/商品filter・runtime・受入は未完了
 
 ## Latest implementation cycle
 
@@ -11,6 +11,7 @@
 - CI修正サイクル3の検証では、Windows上で`python -m unittest discover -s scripts/ops/tests -p "test_*.py"`を実行し、15 tests / 2 skippedで成功した。
 - CI修正サイクル4では、Crawlerのcategory decision fixtureへ新しい`rawCategory`/`rawSubCategory`を明示し、raw field preservationにより戻り値が新しいオブジェクトになる契約へテスト期待値を合わせる。これは配当機能のMoney Forward raw category保持に伴う既存fixture更新である。
 - CI run `31473463413`のLinuxログでは、Crawlerの失敗はこのcategory decision test 2件だけで、Windowsで見えたEPERM/lock timing差異やEDINET key由来の`closeDb`差異は発生していない。build-demo、ops 2環境、Docker 2件、e2e-webは成功した。
+- CI run `31474308617`では、test、build-demo、e2e-web、Docker build（web/crawler）、ops-test（Ubuntu 22.04/latest）の全jobが成功し、PR #18のCIをgreenにした。
 - Sol mediumの実装レビュー（Euler）で確認した、FY会社予想と暦年実績の表示混同、旧migration未適用DBの詳細画面、予想表示切替のCSV/UI不整合、同期失敗時の最終成功時刻消失を修正した。
 - 配当ページは実績暦年と会社予想FYを見出し・KPI・CSVで明示的に分離し、`includeForecast=1|0`をURLへ反映する。銘柄詳細リンクは既存queryを保持する。
 - 予想非表示時の画面内CSVは予想列を空欄にし、CSVセルのformula injectionを無害化する。業種・利回りの不明値は`データなし`へまとめる。

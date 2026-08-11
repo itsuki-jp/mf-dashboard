@@ -26,7 +26,7 @@
 - [x] 株式(現物)の業種別・利回り別切替
 - [x] 配当ページ
 - [x] 配当詳細・CSV（画面内生成のCSV）
-- [~] PR #18 CI修正（format/lint警告、static demo route、opsテストは修正済み。Crawler affected testの既存fixture整合を修正中）
+- [x] PR #18 CI修正（format/lint警告、static demo route、opsテスト、Crawler affected test fixtureを修正し、全CI green）
 - [~] テスト・Storybook・runtime確認（DB 8 tests、Crawler 7 tests、Web unit 593 tests、対象Storybook 26 tests、全体typecheck 8 packagesは通過。全Storybook/runtimeは継続確認）
 - [ ] ユーザー受入
 
@@ -38,7 +38,7 @@ MVPのDB・provider・query・UIコードは実装済み。Sol medium実装レ�
 - [x] group配当ページの`PageProps` intersection警告を明示的なprops型へ置き換える
 - [x] `build-demo`の`/[groupId]/dividends` static export失敗を、通常runtimeのquery対応を保ったまま修正する（配当routeの停止は解消。Windows相当buildは別routeの`demo:...` path作成エラーで停止し、Linux CIで継続確認）
 - [x] Ubuntu 22.04/latestで失敗したbackup retention testの実時計依存を固定する（実行時刻ではなくfixtureの固定`now`からexpired mtimeを算出）
-- [~] ローカル該当チェック、demo build、PR CI結果をEvidenceへ記録する
+- [x] ローカル該当チェック、demo build、PR CI結果をEvidenceへ記録する
 
 Evidence:
 
@@ -48,6 +48,7 @@ Evidence:
 - CI修正サイクル2の検証: `pnpm exec oxlint --type-aware --format=github`（545 files / 0 warnings / 0 errors）と`pnpm turbo typecheck`（8 packages）が成功。PowerShell環境変数での`next build`は配当routeを通過したが、Windowsでは別routeの`demo:...` path作成で停止。Linux CIのbuild-demoで最終判定する。
 - CI修正サイクル3の実装・検証: `scripts/ops/tests/test_backup.py`のexpired mtimeを固定`now - 15日`へ変更した。Windows上のops test suiteは15 tests / 2 skippedで成功した。Ubuntu CIで最終確認する。
 - CI修正サイクル4の実装・検証: `categorize-cash-flow.test.ts`のfixtureへraw category fieldsを追加し、raw preservation後の値比較をidentity比較からdeep equalityへ変更した。対象Crawler testは3 testsで成功した。CI run `31473463413`ではこのtestの2件のみ失敗し、その他のCI jobは成功した。
+- CI修正サイクル4後のPR確認: CI run `31474308617`で全job成功。`test`（lint/format/knip/typecheck/affected test/ops）、`build-demo`、`e2e-web`、Docker build 2件、ops-test 2環境を確認した。
 
 ## Integrated baseline
 
