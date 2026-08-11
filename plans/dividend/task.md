@@ -26,7 +26,7 @@
 - [x] 株式(現物)の業種別・利回り別切替
 - [x] 配当ページ
 - [x] 配当詳細・CSV（画面内生成のCSV）
-- [~] PR #18 CI修正（format/lint警告とstatic demo routeは修正済み、opsテストの時刻依存を修正中）
+- [~] PR #18 CI修正（format/lint警告、static demo route、opsテストは修正済み。Crawler affected testの既存fixture整合を修正中）
 - [~] テスト・Storybook・runtime確認（DB 8 tests、Crawler 7 tests、Web unit 593 tests、対象Storybook 26 tests、全体typecheck 8 packagesは通過。全Storybook/runtimeは継続確認）
 - [ ] ユーザー受入
 
@@ -47,6 +47,7 @@ Evidence:
 - CI修正サイクル2の実装1: Next.jsが条件付き`dynamic` exportを拒否したため、その案を取り下げた。static demo build時だけ`searchParams`解決をスキップし、通常runtimeでは解決する`NEXT_PUBLIC_STATIC_DEMO_BUILD`分岐へ変更した。再度`build:demo`相当で検証中。
 - CI修正サイクル2の検証: `pnpm exec oxlint --type-aware --format=github`（545 files / 0 warnings / 0 errors）と`pnpm turbo typecheck`（8 packages）が成功。PowerShell環境変数での`next build`は配当routeを通過したが、Windowsでは別routeの`demo:...` path作成で停止。Linux CIのbuild-demoで最終判定する。
 - CI修正サイクル3の実装・検証: `scripts/ops/tests/test_backup.py`のexpired mtimeを固定`now - 15日`へ変更した。Windows上のops test suiteは15 tests / 2 skippedで成功した。Ubuntu CIで最終確認する。
+- CI修正サイクル4の実装・検証: `categorize-cash-flow.test.ts`のfixtureへraw category fieldsを追加し、raw preservation後の値比較をidentity比較からdeep equalityへ変更した。対象Crawler testは3 testsで成功した。CI run `31473463413`ではこのtestの2件のみ失敗し、その他のCI jobは成功した。
 
 ## Integrated baseline
 

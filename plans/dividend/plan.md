@@ -9,6 +9,8 @@
 - CI修正サイクル2では、Next.jsのroute configが静的値しか受け付けないため、`DEMO_MODE`条件付きdynamic設定案を取り下げた。代わりに`NEXT_PUBLIC_STATIC_DEMO_BUILD`がtrueのstatic export時だけ`searchParams`を解決せず、通常runtimeではqueryを解決する分岐へ変更した。Windows相当buildでは配当routeのprerender停止は解消し、別のgroup ID path（`demo:...`）のOS依存エラーで停止した。
 - CI修正サイクル3では、backup retention testのexpired file mtimeを実時計ではなく、テストが`create_backup`へ渡す固定`now`から算出する。これによりUbuntuの実行日やtimezoneに依存せず、retention判定を再現可能にする。
 - CI修正サイクル3の検証では、Windows上で`python -m unittest discover -s scripts/ops/tests -p "test_*.py"`を実行し、15 tests / 2 skippedで成功した。
+- CI修正サイクル4では、Crawlerのcategory decision fixtureへ新しい`rawCategory`/`rawSubCategory`を明示し、raw field preservationにより戻り値が新しいオブジェクトになる契約へテスト期待値を合わせる。これは配当機能のMoney Forward raw category保持に伴う既存fixture更新である。
+- CI run `31473463413`のLinuxログでは、Crawlerの失敗はこのcategory decision test 2件だけで、Windowsで見えたEPERM/lock timing差異やEDINET key由来の`closeDb`差異は発生していない。build-demo、ops 2環境、Docker 2件、e2e-webは成功した。
 - Sol mediumの実装レビュー（Euler）で確認した、FY会社予想と暦年実績の表示混同、旧migration未適用DBの詳細画面、予想表示切替のCSV/UI不整合、同期失敗時の最終成功時刻消失を修正した。
 - 配当ページは実績暦年と会社予想FYを見出し・KPI・CSVで明示的に分離し、`includeForecast=1|0`をURLへ反映する。銘柄詳細リンクは既存queryを保持する。
 - 予想非表示時の画面内CSVは予想列を空欄にし、CSVセルのformula injectionを無害化する。業種・利回りの不明値は`データなし`へまとめる。
