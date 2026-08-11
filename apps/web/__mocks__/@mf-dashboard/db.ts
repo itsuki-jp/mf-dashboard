@@ -3,7 +3,15 @@
 import { fn } from "storybook/test";
 
 // Core exports
-export const getDb = fn();
+const mockDb = {
+  select: fn(() => ({
+    from: fn(() => ({
+      all: fn(() => []),
+    })),
+  })),
+};
+
+export const getDb = fn(() => mockDb);
 export const closeDb = fn();
 export const initDb = fn();
 export const isDatabaseAvailable = fn(() => true);

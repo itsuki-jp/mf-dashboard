@@ -103,10 +103,10 @@ class BackupTest(unittest.TestCase):
         destination.mkdir()
         expired = destination / "mf-dashboard-20260101-000000.tar.gpg"
         expired.write_bytes(b"expired")
-        old = datetime.now(timezone.utc) - timedelta(days=15)
+        now = datetime(2026, 7, 31, 8, 30, tzinfo=timezone.utc)
+        old = now - timedelta(days=15)
         os.utime(expired, (old.timestamp(), old.timestamp()))
 
-        now = datetime(2026, 7, 31, 8, 30, tzinfo=timezone.utc)
         encrypted = create_backup(self.config(), now=now, encrypt=self.copy_encrypt)
 
         self.assertEqual(encrypted.name, "mf-dashboard-20260731-083000.tar.gpg")

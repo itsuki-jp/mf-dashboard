@@ -86,6 +86,30 @@ function applyDecisionsToCashFlow(
   };
 }
 
+function preserveRawCategories(source: CashFlowSummary, target: CashFlowSummary): CashFlowSummary {
+  const rawByMfId = new Map(
+    source.items.map((item) => [
+      item.mfId,
+      {
+        rawCategory: item.rawCategory ?? item.category,
+        rawSubCategory: item.rawSubCategory ?? item.subCategory,
+      },
+    ]),
+  );
+
+  return {
+    ...target,
+    items: target.items.map((item) => {
+      const raw = rawByMfId.get(item.mfId);
+      return {
+        ...item,
+        rawCategory: item.rawCategory ?? raw?.rawCategory ?? item.category,
+        rawSubCategory: item.rawSubCategory ?? raw?.rawSubCategory ?? item.subCategory,
+      };
+    }),
+  };
+}
+
 export async function categorizeCashFlowMonth(options: {
   page: Page;
   db: Db;
@@ -95,25 +119,26 @@ export async function categorizeCashFlowMonth(options: {
   usage: CategoryDecisionUsage;
 }): Promise<CashFlowSummary> {
   const { page, db, profileId, cashFlow, config, usage } = options;
-  let latestCashFlowForFallback = cashFlow;
+  const sourceCashFlow = preserveRawCategories(cashFlow, cashFlow);
+  let latestCashFlowForFallback = sourceCashFlow;
   let appliedDecisionsForFallback: ResolvedCategoryDecision[] = [];
 
   try {
     if ((await findCategorizationTargets(db, profileId, cashFlow)).length === 0) {
-      return cashFlow;
+      return sourceCashFlow;
     }
 
     const latestCashFlow = await scrapeCashFlowMonth(page, cashFlow.month);
-    latestCashFlowForFallback = latestCashFlow;
+    latestCashFlowForFallback = preserveRawCategories(sourceCashFlow, latestCashFlow);
     const latestTargets = await findCategorizationTargets(db, profileId, latestCashFlow);
     if (latestTargets.length === 0) {
-      return latestCashFlow;
+      return latestCashFlowForFallback;
     }
 
     const candidates = await scrapeCategoryCandidates(page);
     if (candidates.length === 0) {
       warn("Skipped category decision because no Money Forward category candidates were found.");
-      return latestCashFlow;
+      return latestCashFlowForFallback;
     }
 
     const engine = new CategoryDecisionEngine({
@@ -130,13 +155,13 @@ export async function categorizeCashFlowMonth(options: {
     const decisions = await engine.decideMany(latestTargets);
 
     if (decisions.length === 0) {
-      return latestCashFlow;
+      return latestCashFlowForFallback;
     }
 
     const csrfToken = await getCsrfToken(page);
     if (!csrfToken) {
       warn("Skipped category update because CSRF token was not found.");
-      return latestCashFlow;
+      return latestCashFlowForFallback;
     }
 
     const { appliedCount, appliedDecisions } = await applyCategoryDecisions({
@@ -147,13 +172,13 @@ export async function categorizeCashFlowMonth(options: {
     appliedDecisionsForFallback = appliedDecisions;
 
     if (appliedCount === 0) {
-      return latestCashFlow;
+      return latestCashFlowForFallback;
     }
 
     info(`Applied category decisions: ${appliedCount}/${decisions.length} for ${cashFlow.month}`);
     const updatedCashFlow = await scrapeCashFlowMonth(page, cashFlow.month);
-    latestCashFlowForFallback = updatedCashFlow;
-    return updatedCashFlow;
+    latestCashFlowForFallback = preserveRawCategories(sourceCashFlow, updatedCashFlow);
+    return latestCashFlowForFallback;
   } catch {
     const categoriesWereApplied = appliedDecisionsForFallback.length > 0;
     const fallbackMessage = categoriesWereApplied

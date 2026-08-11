@@ -23,6 +23,25 @@ interface GroupSelectorClientProps {
   defaultGroupId: string;
 }
 
+const SCOPE_DEPENDENT_SEARCH_PARAMS = ["security", "account", "product"] as const;
+
+export function buildGroupSelectionPath(
+  pathname: string,
+  groupId: string,
+  searchParams = "",
+  hash = "",
+): string {
+  const params = new URLSearchParams(searchParams);
+  for (const key of SCOPE_DEPENDENT_SEARCH_PARAMS) {
+    params.delete(key);
+  }
+  params.sort();
+
+  const query = params.toString();
+  const normalizedHash = hash ? `#${hash.replace(/^#/, "")}` : "";
+  return `${buildGroupPath(groupId, extractPagePath(pathname))}${query ? `?${query}` : ""}${normalizedHash}`;
+}
+
 export function GroupSelectorClient({ groups, defaultGroupId }: GroupSelectorClientProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,10 +57,15 @@ export function GroupSelectorClient({ groups, defaultGroupId }: GroupSelectorCli
     const group = groups.find((g) => g.id === groupId);
     if (!group) return;
 
-    const pagePath = extractPagePath(pathname);
-
     startTransition(() => {
-      router.push(buildGroupPath(groupId, pagePath) as Route);
+      router.push(
+        buildGroupSelectionPath(
+          pathname,
+          groupId,
+          window.location.search,
+          window.location.hash,
+        ) as Route,
+      );
     });
   };
 

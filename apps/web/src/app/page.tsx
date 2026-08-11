@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { AssetBreakdownChart } from "../components/info/asset-breakdown-chart";
 import { AssetHistoryChart } from "../components/info/asset-history-chart";
 import { DailyChangeCard } from "../components/info/daily-change-card";
+import { DividendSummaryCard } from "../components/info/dividend-summary-card";
 import { MonthlyBalanceCard } from "../components/info/monthly-balance-card";
 import { MonthlyIncomeExpenseChart } from "../components/info/monthly-income-expense-chart";
 import { PageLayout } from "../components/layout/page-layout";
@@ -20,6 +21,8 @@ export async function DashboardContent({ groupId }: { groupId?: string }) {
         <AssetBreakdownChart className="lg:col-span-2" groupId={groupId} />
         <MonthlyBalanceCard groupId={groupId} />
       </div>
+
+      <DividendSummaryCard groupId={groupId} />
 
       {showDailyChange && <DailyChangeCard groupId={groupId} />}
 

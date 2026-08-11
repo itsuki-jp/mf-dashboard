@@ -27,6 +27,8 @@ import {
 } from "./crawler-progress.js";
 import { resolveHistoryFetchPolicy } from "./history-policy.js";
 import { error, info, warn } from "./logger.js";
+import { createEdinetDbClient } from "./market-data/edinet-db-client.js";
+import { syncStockMarketData } from "./market-data/sync-stock-market-data.js";
 import {
   createProfileCompletedStatus,
   createProfileFailedStatus,
@@ -47,6 +49,7 @@ export async function runCrawler(
 ): Promise<void> {
   const { crawler: config, profiles } = await runLoadPhase();
   const failures: unknown[] = [];
+  let successfulProfiles = 0;
   const enabledProfiles = profiles.filter(({ enabled }) => enabled);
   const selectedProfiles = options.profileId
     ? enabledProfiles.filter(({ id }) => id === options.profileId)
@@ -67,6 +70,7 @@ export async function runCrawler(
     const profileProgress = createProfileProgressReporter(progress, profile.id);
     try {
       await runProfileCrawler(config, profile, profileProgress, options);
+      successfulProfiles += 1;
     } catch (err) {
       failures.push(err);
       warn(`Money Forward profile ${profile.id} failed; continuing with the next profile.`);
@@ -76,6 +80,24 @@ export async function runCrawler(
   if (failures.length === 1) throw failures[0];
   if (failures.length > 1) {
     throw new AggregateError(failures, `${failures.length} Money Forward profiles failed`);
+  }
+
+  const marketDataClient = createEdinetDbClient();
+  if (successfulProfiles > 0 && marketDataClient) {
+    try {
+      const db = await initDb();
+      try {
+        await syncStockMarketData(db, marketDataClient);
+      } finally {
+        closeDb();
+      }
+    } catch {
+      // EDINET DB is an optional enrichment source. A provider outage must not
+      // turn a successful Money Forward scrape into a failed run.
+      warn("EDINET DB enrichment failed; Money Forward data remains available.");
+    }
+  } else if (successfulProfiles > 0) {
+    info("EDINET DB enrichment skipped because EDINETDB_KEY is not configured.");
   }
 
   info("Completed all enabled Money Forward profiles!");

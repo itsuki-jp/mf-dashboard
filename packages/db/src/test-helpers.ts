@@ -30,6 +30,10 @@ export async function createTestDb(url = ":memory:"): Promise<Db> {
  */
 export async function resetTestDb(db: Db): Promise<void> {
   // FK の依存順に削除
+  await db.delete(schema.stockDividendHistory).run();
+  await db.delete(schema.stockMarketData).run();
+  await db.delete(schema.marketDataSyncStatuses).run();
+  await db.delete(schema.marketDataRequestBudgets).run();
   await db.delete(schema.holdingValues).run();
   await db.delete(schema.dailySnapshots).run();
   await db.delete(schema.holdings).run();

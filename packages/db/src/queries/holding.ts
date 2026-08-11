@@ -13,6 +13,7 @@ const FALLBACK_ACCOUNT_MF_ID = "unknown";
 export interface DashboardHolding {
   id: number;
   name: string;
+  code?: string | null;
   type: string;
   liabilityCategory: string | null;
   categoryId?: number | null;
@@ -151,6 +152,7 @@ export async function getHoldingsWithLatestValues(
         .select({
           id: schema.holdings.id,
           name: schema.holdings.name,
+          code: schema.holdings.code,
           type: schema.holdings.type,
           liabilityCategory: schema.holdings.liabilityCategory,
           categoryId: schema.holdings.categoryId,
@@ -213,6 +215,7 @@ export async function getHoldingsByAccountId(
     .select({
       id: schema.holdings.id,
       name: schema.holdings.name,
+      code: schema.holdings.code,
       type: schema.holdings.type,
       liabilityCategory: schema.holdings.liabilityCategory,
       categoryName: schema.assetCategories.name,

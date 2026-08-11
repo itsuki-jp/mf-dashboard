@@ -80,6 +80,8 @@ export async function saveTransaction(
     accountId,
     category: item.category,
     subCategory: item.subCategory ?? null,
+    rawCategory: item.rawCategory ?? item.category,
+    rawSubCategory: item.rawSubCategory ?? item.subCategory ?? null,
     description: item.description,
     amount: item.amount,
     type: item.type,
@@ -204,6 +206,8 @@ function prepareTransactionData(
   accountId: number | null;
   category: string | null;
   subCategory: string | null;
+  rawCategory: string | null;
+  rawSubCategory: string | null;
   description: string;
   amount: number;
   type: string;
@@ -223,6 +227,8 @@ function prepareTransactionData(
     accountId,
     category: item.category,
     subCategory: item.subCategory ?? null,
+    rawCategory: item.rawCategory ?? item.category,
+    rawSubCategory: item.rawSubCategory ?? item.subCategory ?? null,
     description: item.description,
     amount: item.amount,
     type: item.type,
@@ -289,6 +295,8 @@ export async function replaceTransactionsForMonth(
           accountId: sql`excluded.account_id`,
           category: sql`excluded.category`,
           subCategory: sql`excluded.sub_category`,
+          rawCategory: sql`excluded.raw_category`,
+          rawSubCategory: sql`excluded.raw_sub_category`,
           description: sql`excluded.description`,
           amount: sql`excluded.amount`,
           type: sql`excluded.type`,

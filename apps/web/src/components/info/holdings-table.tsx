@@ -1,6 +1,11 @@
-import { getAccountByMfId } from "@mf-dashboard/db";
-import { getLatestTotalAssets } from "@mf-dashboard/db";
-import { getHoldingsByAccountId, getHoldingsWithLatestValues } from "@mf-dashboard/db";
+import {
+  getAccountByMfId,
+  getDb,
+  getLatestTotalAssets,
+  getHoldingsByAccountId,
+  getHoldingsWithLatestValues,
+  schema,
+} from "@mf-dashboard/db";
 import { LucideIcon, PiggyBankIcon, LandmarkIcon } from "lucide-react";
 import { sortByAmountDescending } from "../../lib/amount-order";
 import { Card, CardHeader, CardTitle } from "../ui/card";
@@ -26,6 +31,8 @@ const CONFIG = {
   },
 } as const;
 
+type StockMarketDataRow = typeof schema.stockMarketData.$inferSelect;
+
 export async function HoldingsTable({
   type,
   icon,
@@ -38,6 +45,17 @@ export async function HoldingsTable({
     ? await getHoldingsByAccountId(account.id, groupId)
     : await getHoldingsWithLatestValues(groupId);
   const holdings = allHoldings.filter((h) => h.type === type && h.amount);
+  let marketRows: StockMarketDataRow[] = [];
+  if (type === "asset") {
+    try {
+      marketRows = await getDb().select().from(schema.stockMarketData).all();
+    } catch {
+      // Keep the existing holding view available until the market-data migration is applied.
+    }
+  }
+  const marketByCode = new Map(
+    marketRows.map((row) => [row.normalizedCode.trim().toUpperCase().replace(/\.T$/, ""), row]),
+  );
 
   const config = CONFIG[type];
   const Icon = icon ?? config.icon;
@@ -79,6 +97,9 @@ export async function HoldingsTable({
         avgCostPrice: number | null;
         quantity: number | null;
         unitPrice: number | null;
+        code: string | null;
+        industryName: string | null;
+        forecastYieldPct: number | null;
       }>
     >
   >((acc, holding) => {
@@ -103,6 +124,27 @@ export async function HoldingsTable({
       avgCostPrice: holding.avgCostPrice,
       quantity: holding.quantity,
       unitPrice: holding.unitPrice,
+      code: holding.code ?? null,
+      industryName:
+        holding.categoryName === "株式(現物)"
+          ? (marketByCode.get((holding.code ?? "").trim().toUpperCase().replace(/\.T$/, ""))
+              ?.industryName ?? null)
+          : null,
+      forecastYieldPct:
+        holding.categoryName === "株式(現物)"
+          ? (() => {
+              const market = marketByCode.get(
+                (holding.code ?? "").trim().toUpperCase().replace(/\.T$/, ""),
+              );
+              if (
+                !market ||
+                (market.forecastDpsAdjusted === null && market.forecastDpsRaw === null)
+              )
+                return null;
+              const dps = market.forecastDpsAdjusted ?? market.forecastDpsRaw;
+              return holding.unitPrice && dps !== null ? (dps / holding.unitPrice) * 100 : null;
+            })()
+          : null,
     });
     return acc;
   }, {});

@@ -64,6 +64,8 @@ function item(mfId: string, description = "Service A"): CashFlowItem {
     description,
     category: "未分類",
     subCategory: null,
+    rawCategory: "未分類",
+    rawSubCategory: null,
     isTransfer: false,
     isExcludedFromCalculation: false,
   };
@@ -172,7 +174,7 @@ describe("categorizeCashFlowMonth", () => {
       usage: { llmCallsUsed: 0 },
     });
 
-    expect(result).toBe(latestCashFlow);
+    expect(result).toEqual(latestCashFlow);
     expect(warn).toHaveBeenCalledWith(
       "Category decision failed for 2026-06; saving latest scraped cash flow (code: CATEGORY_DECISION_PIPELINE_FAILED).",
     );

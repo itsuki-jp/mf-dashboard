@@ -7,6 +7,7 @@ import {
   Landmark,
   Calculator,
   Lightbulb,
+  Coins,
   X,
 } from "lucide-react";
 import type { Route } from "next";
@@ -44,6 +45,11 @@ const navItems: NavItem[] = [
     title: "資産",
     path: "bs",
     icon: PiggyBank,
+  },
+  {
+    title: "配当・分配",
+    path: "dividends",
+    icon: Coins,
   },
   {
     title: "インサイト",

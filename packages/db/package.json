@@ -19,7 +19,9 @@
     "./repository/spending-targets": "./src/repositories/spending-targets.ts",
     "./repository/analytics": "./src/repositories/analytics.ts",
     "./repository/profiles": "./src/repositories/profiles.ts",
+    "./repository/market-data": "./src/repositories/market-data.ts",
     "./queries/read-only-query": "./src/queries/read-only-query.ts",
+    "./queries/dividend": "./src/queries/dividend.ts",
     "./types": "./src/types.ts",
     "./utils": "./src/utils.ts",
     "./test-helpers": "./src/test-helpers.ts"

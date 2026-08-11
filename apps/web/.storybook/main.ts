@@ -23,6 +23,10 @@ const config: StorybookConfig = {
       resolve: {
         ...config.resolve,
         alias: Object.assign({}, baseAlias, {
+          "@mf-dashboard/db/queries/dividend": join(
+            __dirname,
+            "../__mocks__/@mf-dashboard/db-dividend.ts",
+          ),
           "@mf-dashboard/db": join(__dirname, "../__mocks__/@mf-dashboard/db.ts"),
         }),
       },
