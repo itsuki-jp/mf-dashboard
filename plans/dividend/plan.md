@@ -7,6 +7,8 @@
 - CI修正サイクルを開始した。PR #18のCIログで、Crawlerのformat/lint警告、opsバックアップテストの時刻依存、static demo export時の配当ページ`searchParams`動的アクセスを確認した。まずformat/lint警告と型の明確化をatomic commitし、次にstatic demo対応、最後にopsテストの決定性を修正する。
 - CI修正サイクル1では、`security-code.ts`をoxfmtで整形し、Crawlerのtyped mockとgroup配当ページの明示的props型でlint/typecheck警告を解消した。対象Crawler test 1件、`pnpm turbo typecheck` 8 packages、oxlint 545 files、対象format checkを通過した。
 - CI修正サイクル2では、Next.jsのroute configが静的値しか受け付けないため、`DEMO_MODE`条件付きdynamic設定案を取り下げた。代わりに`NEXT_PUBLIC_STATIC_DEMO_BUILD`がtrueのstatic export時だけ`searchParams`を解決せず、通常runtimeではqueryを解決する分岐へ変更した。Windows相当buildでは配当routeのprerender停止は解消し、別のgroup ID path（`demo:...`）のOS依存エラーで停止した。
+- CI修正サイクル3では、backup retention testのexpired file mtimeを実時計ではなく、テストが`create_backup`へ渡す固定`now`から算出する。これによりUbuntuの実行日やtimezoneに依存せず、retention判定を再現可能にする。
+- CI修正サイクル3の検証では、Windows上で`python -m unittest discover -s scripts/ops/tests -p "test_*.py"`を実行し、15 tests / 2 skippedで成功した。
 - Sol mediumの実装レビュー（Euler）で確認した、FY会社予想と暦年実績の表示混同、旧migration未適用DBの詳細画面、予想表示切替のCSV/UI不整合、同期失敗時の最終成功時刻消失を修正した。
 - 配当ページは実績暦年と会社予想FYを見出し・KPI・CSVで明示的に分離し、`includeForecast=1|0`をURLへ反映する。銘柄詳細リンクは既存queryを保持する。
 - 予想非表示時の画面内CSVは予想列を空欄にし、CSVセルのformula injectionを無害化する。業種・利回りの不明値は`データなし`へまとめる。

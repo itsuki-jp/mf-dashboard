@@ -26,7 +26,7 @@
 - [x] 株式(現物)の業種別・利回り別切替
 - [x] 配当ページ
 - [x] 配当詳細・CSV（画面内生成のCSV）
-- [~] PR #18 CI修正（format/lint警告は修正済み、static demo exportを修正中、opsテストの時刻依存が残作業）
+- [~] PR #18 CI修正（format/lint警告とstatic demo routeは修正済み、opsテストの時刻依存を修正中）
 - [~] テスト・Storybook・runtime確認（DB 8 tests、Crawler 7 tests、Web unit 593 tests、対象Storybook 26 tests、全体typecheck 8 packagesは通過。全Storybook/runtimeは継続確認）
 - [ ] ユーザー受入
 
@@ -37,7 +37,7 @@ MVPのDB・provider・query・UIコードは実装済み。Sol medium実装レ�
 - [x] `test` jobのformat失敗対象を`apps/crawler/src/market-data/security-code.ts`に特定し、lintのmock type/unbound method警告をテスト内のtyped mockへ修正する
 - [x] group配当ページの`PageProps` intersection警告を明示的なprops型へ置き換える
 - [x] `build-demo`の`/[groupId]/dividends` static export失敗を、通常runtimeのquery対応を保ったまま修正する（配当routeの停止は解消。Windows相当buildは別routeの`demo:...` path作成エラーで停止し、Linux CIで継続確認）
-- [ ] Ubuntu 22.04/latestで失敗したbackup retention testの実時計依存を固定する
+- [x] Ubuntu 22.04/latestで失敗したbackup retention testの実時計依存を固定する（実行時刻ではなくfixtureの固定`now`からexpired mtimeを算出）
 - [~] ローカル該当チェック、demo build、PR CI結果をEvidenceへ記録する
 
 Evidence:
@@ -46,6 +46,7 @@ Evidence:
 - CI修正サイクル1: `pnpm exec oxlint --type-aware --format=github`（545 files / 0 warnings / 0 errors）、対象3ファイルの`oxfmt --check`、Crawler対象test（1 file / 1 test）、`pnpm turbo typecheck`（8 packages）が成功。最初のvitest実行はsandboxの`spawn EPERM`だったため、権限付き再実行で確認した。
 - CI修正サイクル2の実装1: Next.jsが条件付き`dynamic` exportを拒否したため、その案を取り下げた。static demo build時だけ`searchParams`解決をスキップし、通常runtimeでは解決する`NEXT_PUBLIC_STATIC_DEMO_BUILD`分岐へ変更した。再度`build:demo`相当で検証中。
 - CI修正サイクル2の検証: `pnpm exec oxlint --type-aware --format=github`（545 files / 0 warnings / 0 errors）と`pnpm turbo typecheck`（8 packages）が成功。PowerShell環境変数での`next build`は配当routeを通過したが、Windowsでは別routeの`demo:...` path作成で停止。Linux CIのbuild-demoで最終判定する。
+- CI修正サイクル3の実装・検証: `scripts/ops/tests/test_backup.py`のexpired mtimeを固定`now - 15日`へ変更した。Windows上のops test suiteは15 tests / 2 skippedで成功した。Ubuntu CIで最終確認する。
 
 ## Integrated baseline
 
