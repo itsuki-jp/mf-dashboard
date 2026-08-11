@@ -322,8 +322,8 @@ Evidence:
 
 ### 4.3 Runtime and visual acceptance
 
-- [ ] migration済み・seed済みの匿名demo DBでNext.jsを起動する
-- [ ] ホームの既存カードと新規配当サマリーを確認する
+- [x] migration済み・seed済みの匿名demo DBでNext.jsを起動する（HTTP smoke）
+- [~] ホームの既存カードと新規配当サマリーを確認する（HTTP 200と配当文言を確認。目視未実施）
 - [ ] 資産の株式(現物)で3軸を切り替える
 - [ ] 既存の含み損益・保有資産・資産推移が残っていることを確認する
 - [ ] 配当ページの予想切替、期間、口座、商品、銘柄フィルターを確認する
@@ -349,13 +349,13 @@ Evidence:
 
 Runtime evidence:
 
-- 起動コマンド:
-- URL:
-- 使用DB: `demo.db` / その他の匿名fixture（実DBは禁止）
-- 確認した画面:
-- 目視確認:
+- 起動コマンド: `DB_PATH=../../data/demo.db DEMO_MODE=true pnpm exec next dev --hostname 127.0.0.1 --port 3310`（PowerShell環境変数で実行）
+- URL: `http://127.0.0.1:3310/`、`http://127.0.0.1:3310/dividends?year=2026&includeForecast=0`
+- 使用DB: `data/demo.db`（匿名demo DB。`data/moneyforward.db`は未使用）
+- 確認した画面: ホーム、配当ページのHTTP応答
+- 目視確認: 未実施
 - ブラウザ操作確認:
-- 未確認事項:
+- 未確認事項: 実ブラウザの操作、モバイル表示、株式3軸、詳細、CSVクリック、group/profile切替、HTTP CSV route
 
 ## Phase 5: Completion and handoff
 
@@ -401,14 +401,14 @@ Runtime evidence:
 
 ## Final evidence summary
 
-| Evidence layer                 | Status                 | Evidence                                         |
-| ------------------------------ | ---------------------- | ------------------------------------------------ |
-| Requirements and mock reviewed | 完了                   | `plan.md` / user-provided mock                   |
-| Current code investigation     | 完了                   | plan.md Current State                            |
-| Production code                | MVP実装済み            | DB/provider/query/UIをbranchへ追加               |
-| DB migration                   | 実装・匿名demo確認済み | `0003_*.sql`、PowerShell seed                    |
-| Unit tests                     | 関連範囲済み           | DB 8 tests、Crawler 7 tests、Web unit 593 tests  |
-| Storybook/a11y                 | 関連範囲済み           | 配当・保有資産26 stories通過。全体は既存失敗あり |
-| Typecheck                      | 完了                   | `pnpm turbo typecheck` 8 packages                |
-| Browser runtime                | 未着手                 |                                                  |
-| User acceptance                | 未実施                 |                                                  |
+| Evidence layer                 | Status                 | Evidence                                                            |
+| ------------------------------ | ---------------------- | ------------------------------------------------------------------- |
+| Requirements and mock reviewed | 完了                   | `plan.md` / user-provided mock                                      |
+| Current code investigation     | 完了                   | plan.md Current State                                               |
+| Production code                | MVP実装済み            | DB/provider/query/UIをbranchへ追加                                  |
+| DB migration                   | 実装・匿名demo確認済み | `0003_*.sql`、PowerShell seed                                       |
+| Unit tests                     | 関連範囲済み           | DB 8 tests、Crawler 7 tests、Web unit 593 tests                     |
+| Storybook/a11y                 | 関連範囲済み           | 配当・保有資産26 stories通過。全体は既存失敗あり                    |
+| Typecheck                      | 完了                   | `pnpm turbo typecheck` 8 packages                                   |
+| Browser runtime                | 部分確認               | 匿名demo DBでhome=200、dividends=200のHTTP smoke。目視/操作は未実施 |
+| User acceptance                | 未実施                 |                                                                     |
