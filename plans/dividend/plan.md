@@ -1,6 +1,6 @@
 # 配当・分配分析機能 実装計画
 
-ステータス: 実装中 / ブランチ作成済み / EDINET DB実API契約確認済み / Sol medium最終確認OK
+ステータス: 実装中 / DB・EDINET同期基盤完了 / 配当query・UI未完了 / Sol medium最終確認OK
 
 ## Integrated baseline and source documents
 

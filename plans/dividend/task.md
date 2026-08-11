@@ -19,6 +19,7 @@
 - [x] EDINET DB APIの契約確認（実APIのendpoint・レスポンス形状・認証を確認済み。値やkeyは保存していない）
 - [x] 実装ブランチを`main`から作成し、API keyを含む`.env`がGit管理外であることを確認した
 - [x] 配当4テーブル、transactions rawカテゴリ列、migration、DB schema docsを追加した
+- [x] EDINET DB adapter、銘柄コード解決、stage別TTL、永続budget ledger、profile完了後同期を追加した
 - [ ] 配当データの保存・同期
 - [ ] 配当集計クエリ
 - [ ] ホームサマリー
@@ -137,17 +138,17 @@ Evidence:
 - [ ] `market_data_sync_statuses` のstatus/upsert/list repositoryを追加する
 - [ ] `market_data_request_budgets` のprovider基準timezoneのbudget-window ledger repositoryを追加し、全provider request前に原子的なreservationを取得する
 - [ ] EDINET DB clientをCrawler側へ追加し、APIレスポンスを内部型へ変換する
-- [ ] `apps/crawler/src/market-data/edinet-db-client.ts`、`security-code.ts`、`sync-stock-market-data.ts`を追加し、provider responseを`SecurityFact`/`DividendEvent`へ変換する
-- [ ] 認証情報を引数、ログ、例外メッセージへ露出しない
-- [ ] 429、5xx、timeout、invalid JSON、空配列をそれぞれ状態化する
-- [ ] 取得日時・source・asOfを保存する
-- [ ] 同一レスポンスを2回同期しても行数が増えないことをテストする
-- [ ] 現在保有のdistinct `normalizedCode`だけを対象にする
-- [ ] profile loop終了後、成功profileが1件以上のときだけglobal syncし、全profile失敗時はskipする。同一codeをprofile/口座ごとに重複取得しない
-- [ ] mapping→forecast→historyの段階同期、daily budget、TTL、部分成功、429/5xx/networkの停止・継続を実装する
-- [ ] mapping TTL 30日、forecast TTL 24時間、history TTL 7日、最大同時4銘柄、銘柄単位の部分成功、指数バックオフ付き最大2回再試行を実装する
-- [ ] 既存Crawlerの`/runs`手動実行・scheduler・lock/auth境界へEDINET syncを組み込む。別の`/dividends/refresh` endpointはMVPで必須にせず、追加する場合だけ既存Bearer認証・lock・progressを再利用する。providerエラーをMoney Forward run成功/失敗へ混ぜない
-- [ ] API停止時に既存Money Forwardスクレイプ・資産保存を成功扱いから誤って失敗へ変えない
+- [x] `apps/crawler/src/market-data/edinet-db-client.ts`、`security-code.ts`、`sync-stock-market-data.ts`を追加し、provider responseを内部security/history型へ変換する
+- [x] 認証情報を引数、ログ、例外メッセージへ露出しない
+- [x] 429、5xx、timeout、invalid JSON、空配列をそれぞれ状態化する
+- [x] 取得日時・source・asOfを保存する
+- [x] 同一レスポンスを2回同期しても行数が増えないことをテストする
+- [x] 現在保有のdistinct `normalizedCode`だけを対象にする
+- [x] profile loop終了後、成功profileが1件以上のときだけglobal syncし、全profile失敗時はskipする。同一codeをprofile/口座ごとに重複取得しない
+- [x] mapping→forecast→historyの段階同期、daily budget、stage別TTL、部分成功、429/5xx/networkの停止・継続を実装する
+- [x] mapping TTL 30日、forecast TTL 24時間、history TTL 7日、銘柄単位の部分成功、指数バックオフ付き最大2回再試行を実装する（同時実行は無料枠保護のため逐次）
+- [x] 既存Crawlerの`/runs`手動実行・scheduler・lock/auth境界へEDINET syncを組み込む。別の`/dividends/refresh` endpointは追加せず、providerエラーをMoney Forward run成功/失敗へ混ぜない
+- [x] API停止時に既存Money Forwardスクレイプ・資産保存を成功扱いから誤って失敗へ変えない
 
 ### 1.3 Money Forward receipt classifier
 
