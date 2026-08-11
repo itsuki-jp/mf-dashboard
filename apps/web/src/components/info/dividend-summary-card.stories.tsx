@@ -16,6 +16,7 @@ export const Default: Story = {
   beforeEach() {
     mocked(getDividendDashboardData).mockResolvedValue({
       year: 2026,
+      forecastFiscalYears: [2026],
       summary: {
         actualReceivedNet: 60000,
         forecastAnnualGross: 180000,
@@ -44,6 +45,7 @@ export const Unavailable: Story = {
   beforeEach() {
     mocked(getDividendDashboardData).mockResolvedValue({
       year: 2026,
+      forecastFiscalYears: [],
       summary: {
         actualReceivedNet: null,
         forecastAnnualGross: null,

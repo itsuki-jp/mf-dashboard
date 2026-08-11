@@ -171,10 +171,13 @@ export async function upsertMarketDataSyncStatus(
         status: input.status,
         errorCode: input.errorCode ?? null,
         lastAttemptedAt: timestamp,
-        lastSuccessAt: input.lastSuccessAt ?? null,
+        lastSuccessAt:
+          input.lastSuccessAt === undefined
+            ? sql`${schema.marketDataSyncStatuses.lastSuccessAt}`
+            : input.lastSuccessAt,
         nextAllowedAt: input.nextAllowedAt ?? null,
         ttlSeconds: input.ttlSeconds ?? null,
-        asOf: input.asOf ?? null,
+        asOf: input.asOf === undefined ? sql`${schema.marketDataSyncStatuses.asOf}` : input.asOf,
         updatedAt: timestamp,
       },
     })

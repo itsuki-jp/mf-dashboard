@@ -4,7 +4,9 @@ import { closeTestDb, createTestDb } from "../test-helpers";
 import {
   completeMarketDataRequest,
   getBudgetWindowKey,
+  getMarketDataSyncStatus,
   reserveMarketDataRequest,
+  upsertMarketDataSyncStatus,
   upsertStockDividendHistory,
   upsertStockMarketData,
 } from "./market-data";
@@ -88,5 +90,32 @@ describe("market data repositories", () => {
     expect(getBudgetWindowKey(new Date("2099-01-01T15:00:00.000Z"), "Asia/Tokyo")).toBe(
       "2099-01-02",
     );
+  });
+
+  it("preserves the last successful snapshot when a later stage attempt fails", async () => {
+    const db = await createTestDb();
+    try {
+      await upsertMarketDataSyncStatus(db, {
+        normalizedCode: "7203",
+        stage: "forecast",
+        status: "success",
+        lastSuccessAt: "2099-01-01T00:00:00.000Z",
+        asOf: "2099-01-01T00:00:00.000Z",
+      });
+      await upsertMarketDataSyncStatus(db, {
+        normalizedCode: "7203",
+        stage: "forecast",
+        status: "error",
+        errorCode: "provider_unavailable",
+      });
+
+      const status = await getMarketDataSyncStatus("7203", "forecast", "edinetdb", db);
+      expect(status?.status).toBe("error");
+      expect(status?.errorCode).toBe("provider_unavailable");
+      expect(status?.lastSuccessAt).toBe("2099-01-01T00:00:00.000Z");
+      expect(status?.asOf).toBe("2099-01-01T00:00:00.000Z");
+    } finally {
+      closeTestDb(db);
+    }
   });
 });

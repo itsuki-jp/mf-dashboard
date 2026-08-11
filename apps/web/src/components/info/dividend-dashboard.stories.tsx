@@ -4,6 +4,7 @@ import { DividendDashboardClient } from "./dividend-dashboard.client";
 
 const data: DividendDashboardData = {
   year: 2026,
+  forecastFiscalYears: [2026],
   summary: {
     actualReceivedNet: 60000,
     forecastAnnualGross: 180000,
@@ -78,6 +79,7 @@ export const Default: Story = {
     data,
     detail: null,
     csv: "header\nrow",
+    queryString: "",
     initialIncludeForecast: true,
     initialView: "security",
     initialGranularity: "month",

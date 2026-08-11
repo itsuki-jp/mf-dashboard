@@ -210,7 +210,9 @@ async function syncOneSecurity(
         stage: "mapping",
         status: resolution.status === "unsupported" ? "unsupported" : "empty",
         errorCode: resolution.status,
+        lastSuccessAt: mappingFetchedAt,
         ttlSeconds: STAGE_TTL_SECONDS.mapping,
+        asOf: mappingFetchedAt,
       });
       return "skipped";
     }

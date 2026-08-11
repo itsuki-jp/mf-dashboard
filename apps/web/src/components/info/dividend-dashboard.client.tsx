@@ -19,6 +19,7 @@ interface DividendDashboardClientProps {
   data: DividendDashboardData;
   detail: DividendSecurityDetail | null;
   csv: string;
+  queryString: string;
   initialIncludeForecast: boolean;
   initialView: DividendView;
   initialGranularity: DividendGranularity;
@@ -28,6 +29,7 @@ export function DividendDashboardClient({
   data,
   detail,
   csv,
+  queryString,
   initialIncludeForecast,
   initialView,
   initialGranularity,
@@ -38,6 +40,14 @@ export function DividendDashboardClient({
   const series = granularity === "month" ? data.monthlySeries : data.yearlySeries;
   const breakdown = view === "industry" ? data.industries : data.yieldBuckets;
   const visibleSecurities = data.securities;
+
+  function toggleForecast() {
+    const next = !includeForecast;
+    setIncludeForecast(next);
+    const nextParams = new URLSearchParams(queryString);
+    nextParams.set("includeForecast", next ? "1" : "0");
+    window.location.assign(`${window.location.pathname}?${nextParams.toString()}`);
+  }
 
   function downloadCsv() {
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
@@ -52,11 +62,16 @@ export function DividendDashboardClient({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3">
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="font-medium">{data.year}年</span>
+          <span className="font-medium">実績 {data.year}年</span>
+          {data.forecastFiscalYears.length > 0 && (
+            <span className="text-muted-foreground">
+              ／会社予想 FY{data.forecastFiscalYears.join(", FY")}
+            </span>
+          )}
           <button
             type="button"
             aria-pressed={includeForecast}
-            onClick={() => setIncludeForecast((value) => !value)}
+            onClick={toggleForecast}
             className={cn(
               "rounded-full border px-3 py-1.5 transition-colors",
               includeForecast ? "bg-primary text-primary-foreground" : "hover:bg-muted",
@@ -90,7 +105,7 @@ export function DividendDashboardClient({
           value={includeForecast ? data.summary.forecastAnnualGross : null}
           suffix={
             data.summary.periodBasis === "fiscal_year"
-              ? `会社予想・FY${data.securities.find((row) => row.forecastFiscalYear)?.forecastFiscalYear ?? "未定"}`
+              ? `会社予想・FY${data.forecastFiscalYears.join(", FY") || "未定"}`
               : "税引前"
           }
         />
@@ -113,13 +128,13 @@ export function DividendDashboardClient({
           <div>
             <p className="text-sm text-muted-foreground">残り予想額</p>
             <p className="mt-1 font-semibold">
-              {formatNullableAmount(data.summary.forecastRemainingGross)}
+              {formatNullableAmount(includeForecast ? data.summary.forecastRemainingGross : null)}
             </p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">支払月不明の予想</p>
             <p className="mt-1 font-semibold">
-              {formatNullableAmount(data.summary.unknownPaymentMonthGross)}
+              {formatNullableAmount(includeForecast ? data.summary.unknownPaymentMonthGross : null)}
             </p>
           </div>
           <div>
@@ -129,7 +144,7 @@ export function DividendDashboardClient({
         </CardContent>
       </Card>
 
-      {detail && <DividendDetailCard detail={detail} />}
+      {detail && <DividendDetailCard detail={detail} showForecast={includeForecast} />}
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="配当表示軸">
         {(
@@ -180,12 +195,23 @@ export function DividendDashboardClient({
           />
         </div>
       ) : view === "security" ? (
-        <SecurityTable rows={visibleSecurities} showForecast={includeForecast} year={data.year} />
-      ) : (
+        <SecurityTable
+          rows={visibleSecurities}
+          showForecast={includeForecast}
+          year={data.year}
+          queryString={queryString}
+        />
+      ) : includeForecast ? (
         <DividendCompositionChart
-          title={view === "industry" ? "業種別内訳" : "配当利回り別内訳"}
+          title={view === "industry" ? "業種別内訳（会社予想）" : "配当利回り別内訳（会社予想）"}
           rows={breakdown}
         />
+      ) : (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            予想を含めると、業種別・配当利回り別の内訳を表示できます。
+          </CardContent>
+        </Card>
       )}
 
       <p className="text-xs text-muted-foreground">
@@ -232,10 +258,12 @@ function SecurityTable({
   rows,
   showForecast,
   year,
+  queryString,
 }: {
   rows: DividendDashboardData["securities"];
   showForecast: boolean;
   year: number;
+  queryString: string;
 }) {
   if (rows.length === 0) {
     return (
@@ -269,7 +297,7 @@ function SecurityTable({
                 <tr key={row.code} className="border-b last:border-0">
                   <td className="px-2 py-3">
                     <a
-                      href={`?year=${year}&security=${encodeURIComponent(row.code)}#dividend-detail`}
+                      href={buildSecurityHref(queryString, year, row.code)}
                       className="font-medium text-primary hover:underline"
                       aria-label={`${row.name}の配当詳細を開く`}
                     >
@@ -301,7 +329,7 @@ function SecurityTable({
           {rows.map((row) => (
             <a
               key={row.code}
-              href={`?year=${year}&security=${encodeURIComponent(row.code)}#dividend-detail`}
+              href={buildSecurityHref(queryString, year, row.code)}
               className="block rounded-lg border p-3 hover:bg-muted/50"
               aria-label={`${row.name}の配当詳細を開く`}
             >
@@ -327,7 +355,20 @@ function SecurityTable({
   );
 }
 
-function DividendDetailCard({ detail }: { detail: DividendSecurityDetail }) {
+function buildSecurityHref(queryString: string, year: number, code: string): string {
+  const params = new URLSearchParams(queryString);
+  params.set("year", String(year));
+  params.set("security", code);
+  return `?${params.toString()}#dividend-detail`;
+}
+
+function DividendDetailCard({
+  detail,
+  showForecast,
+}: {
+  detail: DividendSecurityDetail;
+  showForecast: boolean;
+}) {
   return (
     <Card id="dividend-detail">
       <CardHeader>
@@ -335,40 +376,53 @@ function DividendDetailCard({ detail }: { detail: DividendSecurityDetail }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid gap-3 text-sm sm:grid-cols-4">
-          <DetailMetric label="年間予想" value={formatNullableAmount(detail.forecastAnnualGross)} />
-          <DetailMetric label="予想利回り" value={formatNullablePercent(detail.forecastYieldPct)} />
+          <DetailMetric
+            label="年間予想"
+            value={showForecast ? formatNullableAmount(detail.forecastAnnualGross) : "予想非表示"}
+          />
+          <DetailMetric
+            label="予想利回り"
+            value={showForecast ? formatNullablePercent(detail.forecastYieldPct) : "予想非表示"}
+          />
           <DetailMetric
             label="Yield on Cost"
-            value={formatNullablePercent(detail.yieldOnCostPct)}
+            value={showForecast ? formatNullablePercent(detail.yieldOnCostPct) : "予想非表示"}
           />
-          <DetailMetric label="支払予定" value="予定月未定" />
+          <DetailMetric label="支払予定" value={showForecast ? "予定月未定" : "予想非表示"} />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[540px] text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="px-2 py-2">年度</th>
-                <th className="px-2 py-2">区分</th>
-                <th className="px-2 py-2 text-right">DPS</th>
-                <th className="px-2 py-2">開示日</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.history.map((event) => (
-                <tr key={`${event.fiscalYear}-${event.period}`} className="border-b last:border-0">
-                  <td className="px-2 py-2">FY{event.fiscalYear}</td>
-                  <td className="px-2 py-2">
-                    {event.period ?? "不明"}・{event.status === "actual" ? "実績" : "予想"}
-                  </td>
-                  <td className="px-2 py-2 text-right tabular-nums">
-                    {event.dps === null ? "算出不可" : formatCurrency(event.dps)}
-                  </td>
-                  <td className="px-2 py-2">{event.announcedAt ?? "未取得"}</td>
+        {showForecast ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[540px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="px-2 py-2">年度</th>
+                  <th className="px-2 py-2">区分</th>
+                  <th className="px-2 py-2 text-right">DPS</th>
+                  <th className="px-2 py-2">開示日</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {detail.history.map((event) => (
+                  <tr
+                    key={`${event.fiscalYear}-${event.period}`}
+                    className="border-b last:border-0"
+                  >
+                    <td className="px-2 py-2">FY{event.fiscalYear}</td>
+                    <td className="px-2 py-2">
+                      {event.period ?? "不明"}・{event.status === "actual" ? "実績" : "予想"}
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums">
+                      {event.dps === null ? "算出不可" : formatCurrency(event.dps)}
+                    </td>
+                    <td className="px-2 py-2">{event.announcedAt ?? "未取得"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">予想を含めると配当履歴を表示できます。</p>
+        )}
       </CardContent>
     </Card>
   );

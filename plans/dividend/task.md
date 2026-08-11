@@ -26,10 +26,10 @@
 - [x] 株式(現物)の業種別・利回り別切替
 - [x] 配当ページ
 - [x] 配当詳細・CSV（画面内生成のCSV）
-- [~] テスト・Storybook・runtime確認（関連テスト済み。全Storybook/runtimeは継続確認）
+- [~] テスト・Storybook・runtime確認（DB 8 tests、Crawler 7 tests、Web unit 593 tests、対象Storybook 26 tests、全体typecheck 8 packagesは通過。全Storybook/runtimeは継続確認）
 - [ ] ユーザー受入
 
-MVPのDB・provider・query・UIコードは実装済み。API全件同期、CSV route化、口座/商品フィルター、実ブラウザruntime、ユーザー受入は未完了として残す。
+MVPのDB・provider・query・UIコードは実装済み。Sol medium実装レビューで指摘されたFY/暦年の表示分離、予想表示切替、旧DB詳細fallback、CSV安全化、sync statusのstale保持を反映した。API全件同期、CSV route化、口座/商品フィルター、実ブラウザruntime、ユーザー受入は未完了として残す。
 
 ## Integrated baseline
 
@@ -252,7 +252,7 @@ Evidence:
 - [x] `apps/web/src/lib/url.ts` のknown pathとactive判定を更新する
 - [ ] profile切替・group切替後も`/dividends`ページを維持する
 - [ ] `apps/web/src/components/layout/group-selector.client.tsx`と`profile-selector.client.tsx`で現在ページとqueryを維持し、scope変更後に存在しないaccount/securityを`all`へ戻す
-- [~] URL queryを正本にする: `year`, `account`, `product`, `security`, `includeForecast`, `view`, `granularity`（MVPはyear/security/includeForecast/view/granularity。account/productは未実装）
+- [~] URL queryを正本にする: `year`, `account`, `product`, `security`, `includeForecast`, `view`, `granularity`（MVPはyear/security/includeForecast/view/granularity。account/productは未実装。予想切替はURL更新、銘柄リンクは既存query保持まで実装）
 - [~] 既定値・不正値・query順序・profile/group切替時の無効account/securityの扱いを実装する（MVP parserのみ）
 - [ ] ページ内は現在scope内の口座・商品・銘柄・期間だけをfilterし、profile選択を重複させない
 - [x] 予想を含む/含まないを実装する
@@ -309,13 +309,13 @@ Evidence:
 
 実装後、変更範囲に応じて次を実行し、結果をEvidenceへ記録する。リポジトリ規約により開発中の`pnpm build`は、ユーザーが明示的に依頼するまで実行しない。
 
-- [~] `pnpm --filter @mf-dashboard/db test`（関連テストは通過。全体はWindowsのEBUSY cleanup等が残る）
-- [~] `pnpm --filter @mf-dashboard/crawler test`（market-data関連テストは通過。全体は未実行）
+- [~] `pnpm --filter @mf-dashboard/db test`（今回の関連テストは2 files / 8 tests通過。全体はWindowsのEBUSY cleanup等が残る）
+- [~] `pnpm --filter @mf-dashboard/crawler test`（今回のmarket-data関連3 files / 7 tests通過。全体は未実行）
 - [x] `pnpm --filter @mf-dashboard/web test:unit`（48 files / 593 tests）
 - [~] `pnpm --filter @mf-dashboard/web test:storybook`（配当関連・保有資産関連は通過。全体は既存失敗あり）
 - [x] `pnpm --filter @mf-dashboard/db build:demo`相当（WindowsではscriptのPOSIX envが失敗するためPowerShell環境変数でseed成功。Playwright/E2Eとruntime起動より前）
 - [ ] `pnpm --filter @mf-dashboard/web test:e2e`
-- [ ] `pnpm turbo typecheck`
+- [x] `pnpm turbo typecheck`（8 packages successful）
 - [ ] `pnpm lint`
 - [ ] `pnpm format:check`
 - [ ] `pnpm knip`
@@ -364,7 +364,7 @@ Runtime evidence:
 - [ ] plan.mdのAcceptance Criteriaを1つずつ判定する
 - [ ] 本task.mdのチェックとEvidenceを更新する
 - [ ] 実装済み、テスト済み、runtime確認済み、ユーザー未確認を分けて報告する
-- [ ] ユーザーが明示しない限り、commit、push、PR、deploy、外部サービスへの書き込みを行わない
+- [x] ユーザー指示に従い、`itsuki-jp/mf-dashboard`の`origin`だけへatomic commit・push・draft PRを行う。`upstream`の`hiroppy/mf-dashboard`へは書き込まない
 
 ## Review record
 
@@ -391,6 +391,14 @@ Runtime evidence:
 - Result: `最終確認OK`
 - Accepted changes: stage別sync status、永続request budget ledger、rawCategory/rawSubCategory migration、`periodBasis`、既存`/runs`境界、selector/query維持、匿名`security_unresolved` seed、`build:demo`先行、DB subpath export、crawler server/file mapを追加
 
+### Sol medium implementation review
+
+- Agent: Euler（Sol medium / implementation reviewer）
+- Focus: 実装済みコードのdata correctness、old DB fallback、CSV/UI state、sync status、scope/filter
+- Result: `High指摘を修正済み。残作業を明示`
+- Fixed: FY予想と暦年実績の表示ラベル分離、旧migration未適用時の詳細fallback、`includeForecast`のURL反映とCSV予想列抑制、予想OFF時の詳細/内訳表示抑制、sync error時の`lastSuccessAt`/`asOf`保持、unknown industry/yieldの明示bucket
+- Remaining: actual 0と未取得の厳密な分離、account/product/security filter、HTTP CSV route、mobile/dialog/a11yの受入、実保有銘柄の全件同期
+
 ## Final evidence summary
 
 | Evidence layer                 | Status                 | Evidence                                         |
@@ -399,7 +407,8 @@ Runtime evidence:
 | Current code investigation     | 完了                   | plan.md Current State                            |
 | Production code                | MVP実装済み            | DB/provider/query/UIをbranchへ追加               |
 | DB migration                   | 実装・匿名demo確認済み | `0003_*.sql`、PowerShell seed                    |
-| Unit tests                     | 関連範囲済み           | DB query 7 tests、Web unit 593 tests             |
+| Unit tests                     | 関連範囲済み           | DB 8 tests、Crawler 7 tests、Web unit 593 tests  |
 | Storybook/a11y                 | 関連範囲済み           | 配当・保有資産26 stories通過。全体は既存失敗あり |
+| Typecheck                      | 完了                   | `pnpm turbo typecheck` 8 packages                |
 | Browser runtime                | 未着手                 |                                                  |
 | User acceptance                | 未実施                 |                                                  |

@@ -1,6 +1,14 @@
 # 配当・分配分析機能 実装計画
 
-ステータス: MVP実装済み / DB・EDINET同期・配当query・ホーム・資産3軸・配当ページ完了 / HTTP CSV・口座/商品filter・runtime・受入は未完了
+ステータス: MVP実装済み・Sol medium実装レビュー対応済み / DB・EDINET同期・配当query・ホーム・資産3軸・配当ページ完了 / HTTP CSV・口座/商品filter・runtime・受入は未完了
+
+## Latest implementation cycle
+
+- Sol mediumの実装レビュー（Euler）で確認した、FY会社予想と暦年実績の表示混同、旧migration未適用DBの詳細画面、予想表示切替のCSV/UI不整合、同期失敗時の最終成功時刻消失を修正した。
+- 配当ページは実績暦年と会社予想FYを見出し・KPI・CSVで明示的に分離し、`includeForecast=1|0`をURLへ反映する。銘柄詳細リンクは既存queryを保持する。
+- 予想非表示時の画面内CSVは予想列を空欄にし、CSVセルのformula injectionを無害化する。業種・利回りの不明値は`データなし`へまとめる。
+- provider同期statusのerror更新は、`lastSuccessAt`/`asOf`を未指定なら保持し、staleな最終成功データを参照できるようにする。
+- 関連検証: DB 8 tests、Crawler 7 tests、Web unit 593 tests、対象Storybook 26 tests、`pnpm turbo typecheck` 8 packagesを通過。全体format/lint/knip、HTTP CSV、実ブラウザ受入は未完了。
 
 ## Integrated baseline and source documents
 

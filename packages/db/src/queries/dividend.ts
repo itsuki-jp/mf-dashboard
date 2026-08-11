@@ -53,6 +53,7 @@ export interface DividendSeriesRow {
 
 export interface DividendDashboardData {
   year: number;
+  forecastFiscalYears: number[];
   summary: {
     actualReceivedNet: number | null;
     forecastAnnualGross: number | null;
@@ -364,9 +365,17 @@ export async function getDividendDashboardData(
       row.forecastAsOf && (!latest || row.forecastAsOf > latest) ? row.forecastAsOf : latest,
     null,
   );
+  const forecastFiscalYears = [
+    ...new Set(
+      securities
+        .map((row) => row.forecastFiscalYear)
+        .filter((value): value is number => value !== null),
+    ),
+  ].sort((a, b) => a - b);
 
   return {
     year,
+    forecastFiscalYears,
     summary: {
       actualReceivedNet,
       forecastAnnualGross,
@@ -410,22 +419,33 @@ export async function getDividendSecurityDetail(
   const data = await getDividendDashboardData(groupId, options, db);
   const row = data.securities.find((security) => security.code === normalizeCode(code));
   if (!row) return null;
-  const market = await db
-    .select({ id: schema.stockMarketData.id })
-    .from(schema.stockMarketData)
-    .where(
-      and(
-        eq(schema.stockMarketData.source, "edinetdb"),
-        eq(schema.stockMarketData.normalizedCode, row.code),
-      ),
-    )
-    .get();
+  let market: { id: number } | undefined;
+  try {
+    market = await db
+      .select({ id: schema.stockMarketData.id })
+      .from(schema.stockMarketData)
+      .where(
+        and(
+          eq(schema.stockMarketData.source, "edinetdb"),
+          eq(schema.stockMarketData.normalizedCode, row.code),
+        ),
+      )
+      .get();
+  } catch {
+    // An older database may not have the market-data migration yet.
+    return { ...row, history: [] };
+  }
   if (!market) return { ...row, history: [] };
-  const history = await db
-    .select()
-    .from(schema.stockDividendHistory)
-    .where(eq(schema.stockDividendHistory.stockMarketDataId, market.id))
-    .all();
+  let history: (typeof schema.stockDividendHistory.$inferSelect)[] = [];
+  try {
+    history = await db
+      .select()
+      .from(schema.stockDividendHistory)
+      .where(eq(schema.stockDividendHistory.stockMarketDataId, market.id))
+      .all();
+  } catch {
+    // An older database may not have the dividend-history migration yet.
+  }
   return {
     ...row,
     history: history
@@ -442,7 +462,7 @@ export async function getDividendSecurityDetail(
   };
 }
 
-export function toDividendCsv(data: DividendDashboardData): string {
+export function toDividendCsv(data: DividendDashboardData, includeForecast = true): string {
   const header = [
     "銘柄コード",
     "銘柄名",
@@ -470,11 +490,11 @@ export function toDividendCsv(data: DividendDashboardData): string {
         row.industryName,
         row.marketValue,
         row.quantity,
-        row.forecastAnnualGross,
-        row.forecastYieldPct,
-        row.yieldOnCostPct,
-        row.forecastFiscalYear,
-        row.periodBasis,
+        includeForecast ? row.forecastAnnualGross : null,
+        includeForecast ? row.forecastYieldPct : null,
+        includeForecast ? row.yieldOnCostPct : null,
+        includeForecast ? row.forecastFiscalYear : null,
+        includeForecast ? row.periodBasis : null,
         row.dataStatus,
       ]
         .map(escape)

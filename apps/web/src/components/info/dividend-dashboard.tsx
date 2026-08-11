@@ -9,11 +9,13 @@ import { DividendDashboardClient } from "./dividend-dashboard.client";
 interface DividendDashboardProps extends DividendQueryOptions {
   groupId?: string;
   securityCode?: string;
+  queryString?: string;
 }
 
 export async function DividendDashboard({
   groupId,
   securityCode,
+  queryString = "",
   year,
   includeForecast = true,
   view = "security",
@@ -33,7 +35,8 @@ export async function DividendDashboard({
     <DividendDashboardClient
       data={data}
       detail={detail}
-      csv={toDividendCsv(data)}
+      csv={toDividendCsv(data, includeForecast)}
+      queryString={queryString}
       initialIncludeForecast={includeForecast}
       initialView={view}
       initialGranularity={granularity}

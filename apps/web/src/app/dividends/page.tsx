@@ -27,6 +27,20 @@ function parseGranularity(value: string | undefined): DividendGranularity | unde
   return value === "year" || value === "month" ? value : undefined;
 }
 
+function serializeSearchParams(
+  searchParams: Record<string, string | string[] | undefined> | undefined,
+): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams ?? {})) {
+    if (Array.isArray(value)) {
+      for (const item of value) params.append(key, item);
+    } else if (value !== undefined) {
+      params.set(key, value);
+    }
+  }
+  return params.toString();
+}
+
 export async function DividendContent({
   groupId,
   searchParams,
@@ -47,6 +61,7 @@ export async function DividendContent({
         view={view}
         granularity={granularity}
         securityCode={first(searchParams?.security)}
+        queryString={serializeSearchParams(searchParams)}
       />
     </PageLayout>
   );

@@ -47,6 +47,7 @@ describe("dividend query helpers", () => {
   it("escapes values in the CSV export", () => {
     const data: DividendDashboardData = {
       year: 2026,
+      forecastFiscalYears: [],
       summary: {
         actualReceivedNet: null,
         forecastAnnualGross: null,
@@ -86,5 +87,6 @@ describe("dividend query helpers", () => {
     };
 
     expect(toDividendCsv(data)).toContain('"\'=Company ""A"""');
+    expect(toDividendCsv(data, false)).toContain('"100000","10","","","","","","unavailable"');
   });
 });
