@@ -271,6 +271,7 @@ function SecurityTable({
                     <a
                       href={`?year=${year}&security=${encodeURIComponent(row.code)}#dividend-detail`}
                       className="font-medium text-primary hover:underline"
+                      aria-label={`${row.name}の配当詳細を開く`}
                     >
                       {row.name}
                     </a>
@@ -302,6 +303,7 @@ function SecurityTable({
               key={row.code}
               href={`?year=${year}&security=${encodeURIComponent(row.code)}#dividend-detail`}
               className="block rounded-lg border p-3 hover:bg-muted/50"
+              aria-label={`${row.name}の配当詳細を開く`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
