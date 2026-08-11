@@ -359,12 +359,19 @@ Runtime evidence:
 
 ## Phase 5: Completion and handoff
 
-- [ ] `git diff --check` を実行する
-- [ ] 変更ファイル一覧を確認し、実DB・secret・個人情報が含まれていないことを確認する
-- [ ] plan.mdのAcceptance Criteriaを1つずつ判定する
-- [ ] 本task.mdのチェックとEvidenceを更新する
-- [ ] 実装済み、テスト済み、runtime確認済み、ユーザー未確認を分けて報告する
+- [x] `git diff --check` を実行する（`origin/main...HEAD`でpass）
+- [x] 変更ファイル一覧を確認し、実DB・secret・個人情報が含まれていないことを確認する（`.env`はignore、差分にkey値・個人パスなし）
+- [~] plan.mdのAcceptance Criteriaを1つずつ判定する（実装済み・検証済み・未確認・残作業を分離。HTTP CSV、filter、実ブラウザ受入は未完了）
+- [x] 本task.mdのチェックとEvidenceを更新する
+- [x] 実装済み、テスト済み、runtime確認済み、ユーザー未確認を分けて報告する
 - [x] ユーザー指示に従い、`itsuki-jp/mf-dashboard`の`origin`だけへatomic commit・push・draft PRを行う。`upstream`の`hiroppy/mf-dashboard`へは書き込まない
+
+Handoff artifact:
+
+- branch: `codex/dividend-income-analysis`
+- draft PR: `https://github.com/itsuki-jp/mf-dashboard/pull/18`
+- PR base/head: `itsuki-jp/mf-dashboard:main` ← `itsuki-jp/mf-dashboard:codex/dividend-income-analysis`
+- implementation commits: `675f47c`, `d3ac824`, `7469c59`, `40c2523`, `5a89d3e`, `99fabe6`, `3e7d9b8`
 
 ## Review record
 

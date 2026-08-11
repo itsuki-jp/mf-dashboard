@@ -9,6 +9,7 @@
 - 予想非表示時の画面内CSVは予想列を空欄にし、CSVセルのformula injectionを無害化する。業種・利回りの不明値は`データなし`へまとめる。
 - provider同期statusのerror更新は、`lastSuccessAt`/`asOf`を未指定なら保持し、staleな最終成功データを参照できるようにする。
 - 関連検証: DB 8 tests、Crawler 7 tests、Web unit 593 tests、対象Storybook 26 tests、`pnpm turbo typecheck` 8 packagesを通過。全体format/lint/knip、HTTP CSV、実ブラウザ受入は未完了。
+- `itsuki-jp/mf-dashboard` のdraft PR #18（`codex/dividend-income-analysis` → `main`）を作成済み。`hiroppy/mf-dashboard`へは書き込んでいない。
 
 ## Integrated baseline and source documents
 
