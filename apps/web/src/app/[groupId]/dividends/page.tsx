@@ -15,5 +15,7 @@ export default async function GroupDividendsPage({
   searchParams,
 }: GroupDividendsPageProps) {
   const { groupId } = await params;
-  return <DividendContent groupId={groupId} searchParams={await searchParams} />;
+  const resolvedSearchParams =
+    process.env.NEXT_PUBLIC_STATIC_DEMO_BUILD === "true" ? undefined : await searchParams;
+  return <DividendContent groupId={groupId} searchParams={resolvedSearchParams} />;
 }

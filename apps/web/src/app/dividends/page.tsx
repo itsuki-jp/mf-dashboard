@@ -68,5 +68,7 @@ export async function DividendContent({
 }
 
 export default async function DividendsPage({ searchParams }: { searchParams: SearchParams }) {
-  return <DividendContent searchParams={await searchParams} />;
+  const resolvedSearchParams =
+    process.env.NEXT_PUBLIC_STATIC_DEMO_BUILD === "true" ? undefined : await searchParams;
+  return <DividendContent searchParams={resolvedSearchParams} />;
 }
