@@ -38,6 +38,9 @@ export interface CashFlowItem {
   date: string;
   category: string | null; // null = 振替（カテゴリなし）
   subCategory: string | null; // 中項目
+  /** Money Forwardから取得した、カテゴリ決定前のraw値 */
+  rawCategory?: string | null;
+  rawSubCategory?: string | null;
   description: string;
   amount: number;
   type: "income" | "expense" | "transfer";

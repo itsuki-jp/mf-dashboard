@@ -176,6 +176,134 @@ export const holdings = sqliteTable(
 );
 
 // ============================================================================
+// 市場データ・配当系
+// ============================================================================
+
+export const stockMarketData = sqliteTable(
+  "stock_market_data",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    source: text("source").notNull(),
+    externalSecurityId: text("external_security_id").notNull(),
+    normalizedCode: text("normalized_code").notNull(),
+    market: text("market"),
+    name: text("name").notNull(),
+    industryName: text("industry_name"),
+    listingStatus: text("listing_status").notNull(),
+    mappingStatus: text("mapping_status").notNull(),
+    forecastFiscalYear: integer("forecast_fiscal_year"),
+    forecastQuarter: text("forecast_quarter"),
+    forecastDpsRaw: real("forecast_dps_raw"),
+    forecastDpsAdjusted: real("forecast_dps_adjusted"),
+    forecastShareBasis: text("forecast_share_basis"),
+    forecastPeriodBasis: text("forecast_period_basis"),
+    forecastSourceDisclosureDate: text("forecast_source_disclosure_date"),
+    forecastAsOf: text("forecast_as_of"),
+    lastMappedAt: text("last_mapped_at"),
+    lastForecastFetchedAt: text("last_forecast_fetched_at"),
+    lastHistoryFetchedAt: text("last_history_fetched_at"),
+    lastErrorCode: text("last_error_code"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("stock_market_data_source_external_idx").on(table.source, table.externalSecurityId),
+    uniqueIndex("stock_market_data_source_code_idx").on(table.source, table.normalizedCode),
+    index("stock_market_data_industry_idx").on(table.industryName),
+    index("stock_market_data_mapping_status_idx").on(table.mappingStatus),
+  ],
+);
+
+export const stockDividendHistory = sqliteTable(
+  "stock_dividend_history",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    stockMarketDataId: integer("stock_market_data_id")
+      .notNull()
+      .references(() => stockMarketData.id, { onDelete: "cascade" }),
+    providerEventId: text("provider_event_id"),
+    economicEventKey: text("economic_event_key").notNull(),
+    eventVersionKey: text("event_version_key").notNull(),
+    revision: integer("revision").notNull().default(1),
+    fiscalYear: integer("fiscal_year").notNull(),
+    paymentYear: integer("payment_year"),
+    period: text("period"),
+    status: text("status").notNull(),
+    dpsRaw: real("dps_raw"),
+    dpsAdjusted: real("dps_adjusted"),
+    periodBasis: text("period_basis").notNull(),
+    announcedAt: text("announced_at"),
+    recordDate: text("record_date"),
+    exDate: text("ex_date"),
+    paymentDate: text("payment_date"),
+    paymentDatePrecision: text("payment_date_precision").notNull(),
+    source: text("source").notNull(),
+    asOf: text("as_of"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("stock_dividend_history_source_event_version_idx").on(
+      table.source,
+      table.eventVersionKey,
+    ),
+    index("stock_dividend_history_stock_fiscal_idx").on(table.stockMarketDataId, table.fiscalYear),
+    index("stock_dividend_history_payment_date_idx").on(table.paymentDate),
+  ],
+);
+
+export const marketDataSyncStatuses = sqliteTable(
+  "market_data_sync_statuses",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    source: text("source").notNull(),
+    normalizedCode: text("normalized_code").notNull(),
+    stage: text("stage").notNull(),
+    status: text("status").notNull(),
+    errorCode: text("error_code"),
+    lastAttemptedAt: text("last_attempted_at"),
+    lastSuccessAt: text("last_success_at"),
+    nextAllowedAt: text("next_allowed_at"),
+    ttlSeconds: integer("ttl_seconds"),
+    asOf: text("as_of"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("market_data_sync_statuses_source_code_stage_idx").on(
+      table.source,
+      table.normalizedCode,
+      table.stage,
+    ),
+    index("market_data_sync_statuses_status_idx").on(table.status),
+  ],
+);
+
+export const marketDataRequestBudgets = sqliteTable(
+  "market_data_request_budgets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    source: text("source").notNull(),
+    budgetWindowKey: text("budget_window_key").notNull(),
+    providerTimezone: text("provider_timezone").notNull(),
+    dailyLimit: integer("daily_limit").notNull(),
+    softLimit: integer("soft_limit").notNull(),
+    safetyReserve: integer("safety_reserve").notNull(),
+    requestsReserved: integer("requests_reserved").notNull().default(0),
+    requestsCompleted: integer("requests_completed").notNull().default(0),
+    windowResetAt: text("window_reset_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("market_data_request_budgets_source_window_idx").on(
+      table.source,
+      table.budgetWindowKey,
+    ),
+  ],
+);
+
+// ============================================================================
 // スナップショット系
 // ============================================================================
 
@@ -236,6 +364,8 @@ export const transactions = sqliteTable(
     accountId: integer("account_id"),
     category: text("category"), // 大項目 null = 振替（カテゴリなし）
     subCategory: text("sub_category"), // 中項目
+    rawCategory: text("raw_category"), // Money Forwardから取得した正規化前の大項目
+    rawSubCategory: text("raw_sub_category"), // Money Forwardから取得した正規化前の中項目
     description: text("description"),
     amount: integer("amount").notNull(),
     type: text("type").notNull(), // "income" / "expense" / "transfer"
@@ -406,6 +536,17 @@ export const holdingsRelations = relations(holdings, ({ one, many }) => ({
     references: [assetCategories.id],
   }),
   values: many(holdingValues),
+}));
+
+export const stockMarketDataRelations = relations(stockMarketData, ({ many }) => ({
+  dividendHistory: many(stockDividendHistory),
+}));
+
+export const stockDividendHistoryRelations = relations(stockDividendHistory, ({ one }) => ({
+  stockMarketData: one(stockMarketData, {
+    fields: [stockDividendHistory.stockMarketDataId],
+    references: [stockMarketData.id],
+  }),
 }));
 
 export const dailySnapshotsRelations = relations(dailySnapshots, ({ one, many }) => ({
