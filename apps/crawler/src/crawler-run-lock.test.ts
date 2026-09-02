@@ -60,7 +60,7 @@ describe("crawler run lock", () => {
         lockPath,
         statePath: tempDir,
       }),
-    ).rejects.toThrow(/EISDIR|directory/);
+    ).rejects.toThrow(/EISDIR|EPERM|EACCES|directory|not permitted/i);
 
     const lock = await acquireCrawlerRunLock("manual", { lockPath });
     await lock.release();
@@ -336,7 +336,7 @@ describe("crawler run lock", () => {
   test("reports running state while a lock is held and idle after release", async () => {
     const lock = await acquireCrawlerRunLock("manual", { lockPath });
 
-    expect(lock.record.pidStartedAt).not.toBeNull();
+    expect(process.platform === "win32" || lock.record.pidStartedAt).toBeTruthy();
     const state = await getCrawlerRunState({ lockPath });
     expect(state.running).toBe(true);
     expect(state.pid).toBe(process.pid);

@@ -55,6 +55,7 @@ let tempDir: string;
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  vi.stubEnv("EDINETDB_KEY", "");
   tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-run-progress-"));
   vi.mocked(initDb).mockResolvedValue({
     transaction: vi.fn<(callback: (transaction: never) => Promise<void>) => Promise<void>>(
@@ -142,6 +143,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await rm(tempDir, { recursive: true, force: true });
 });
 
