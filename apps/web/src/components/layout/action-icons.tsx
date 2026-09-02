@@ -130,6 +130,10 @@ function RefreshControl({
       }
     };
     events.onerror = () => {
+      // EventSource retries a closed response automatically. Stop retrying when the
+      // server has already reported the stream as unavailable; the button remains
+      // disabled until the page is reloaded, avoiding a request loop on every page.
+      events.close();
       if (startRefreshInFlightRef.current) return;
       setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
       setPopoverOpen(false);

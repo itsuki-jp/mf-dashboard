@@ -543,13 +543,15 @@ describe("ActionIcons", () => {
 
   it("disables the header refresh button when the crawler service is unavailable", async () => {
     render(<ActionIcons variant="header" />);
+    const events = EventSourceMock.instances.at(-1);
     await act(async () => {
-      EventSourceMock.instances.at(-1)?.onerror?.(new Event("error"));
+      events?.onerror?.(new Event("error"));
     });
 
     const refreshButton = await screen.findByRole("button", { name: "更新サービス未接続" });
     expect(refreshButton.getAttribute("title")).toBe("更新サービス未接続");
     expect((refreshButton as HTMLButtonElement).disabled).toBe(true);
+    expect(events?.close).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes after reconnecting when a running crawl finished during an SSE outage", async () => {

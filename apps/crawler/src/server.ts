@@ -157,6 +157,7 @@ async function streamCrawlerState(
   let requestedVersion = 0;
   let sentVersion = -1;
   let sending = false;
+  let sentState: string | null = null;
 
   const close = () => {
     if (closed) return;
@@ -177,7 +178,11 @@ async function streamCrawlerState(
         const version = requestedVersion;
         const state = await getState();
         if (!closed) {
-          response.write(`data: ${JSON.stringify(state)}\n\n`);
+          const serializedState = JSON.stringify(state);
+          if (serializedState !== sentState) {
+            response.write(`data: ${serializedState}\n\n`);
+            sentState = serializedState;
+          }
           sentVersion = version;
         }
       }
