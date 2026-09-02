@@ -28,11 +28,28 @@ export function createMetadataBase(
   return new URL(LOCAL_SITE_URL);
 }
 
+function createMetadataAssetUrl(
+  environment: Record<string, string | undefined>,
+  path: `/${string}`,
+): string {
+  const base = createMetadataBase(environment);
+  const configuredBasePath = (environment.NEXT_PUBLIC_BASE_PATH ?? "").replace(/\/+$/, "");
+  const basePath =
+    configuredBasePath &&
+    (base.pathname === configuredBasePath || base.pathname.startsWith(`${configuredBasePath}/`))
+      ? ""
+      : configuredBasePath;
+  const assetBase = new URL(base);
+  assetBase.pathname = `${assetBase.pathname.replace(/\/+$/, "")}${basePath}/`;
+  return new URL(path.slice(1), assetBase).toString();
+}
+
 export function createRootMetadata(
   environment: Record<string, string | undefined> = process.env,
 ): Metadata {
   const basePath = environment.NEXT_PUBLIC_BASE_PATH ?? "";
   const withBasePath = (path: `/${string}`) => `${basePath}${path}`;
+  const metadataAssetUrl = (path: `/${string}`) => createMetadataAssetUrl(environment, path);
 
   return {
     metadataBase: createMetadataBase(environment),
@@ -41,9 +58,10 @@ export function createRootMetadata(
       default: "MoneyForward Me Dashboard",
     },
     description: DASHBOARD_DESCRIPTION,
-    manifest: withBasePath("/manifest.webmanifest"),
+    manifest: metadataAssetUrl("/manifest.webmanifest"),
     icons: {
-      apple: withBasePath("/apple-touch-icon.png"),
+      icon: metadataAssetUrl("/favicon.ico"),
+      apple: metadataAssetUrl("/apple-touch-icon.png"),
     },
     appleWebApp: {
       capable: true,

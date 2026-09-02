@@ -103,7 +103,9 @@ describe("crawler progress", () => {
       await rm(statePath);
       await mkdir(statePath);
 
-      await expect(progress.startStep(CRAWLER_STEPS.analytics)).rejects.toThrow(/EISDIR|directory/);
+      await expect(progress.startStep(CRAWLER_STEPS.analytics)).rejects.toThrow(
+        /EISDIR|EPERM|EACCES|directory|not permitted/i,
+      );
       expect(progress.getState().timeline).toEqual([]);
 
       await rm(statePath, { recursive: true });

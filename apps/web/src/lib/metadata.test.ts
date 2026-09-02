@@ -58,8 +58,11 @@ describe("createRootMetadata", () => {
       NEXT_PUBLIC_BASE_PATH: "/dashboard",
     });
 
-    expect(metadata.manifest).toBe("/dashboard/manifest.webmanifest");
-    expect(metadata.icons).toEqual({ apple: "/dashboard/apple-touch-icon.png" });
+    expect(metadata.manifest).toBe("http://localhost:3000/dashboard/manifest.webmanifest");
+    expect(metadata.icons).toEqual({
+      icon: "http://localhost:3000/dashboard/favicon.ico",
+      apple: "http://localhost:3000/dashboard/apple-touch-icon.png",
+    });
     expect(metadata.openGraph?.images).toEqual([
       {
         url: "/dashboard/logo.png",
@@ -69,5 +72,20 @@ describe("createRootMetadata", () => {
       },
     ]);
     expect(metadata.twitter?.images).toEqual(["/dashboard/logo.png"]);
+  });
+
+  it("does not duplicate a base path already present in the dashboard URL", () => {
+    const metadata = createRootMetadata({
+      DASHBOARD_URL: "https://dashboard.example.com/mf-dashboard",
+      NEXT_PUBLIC_BASE_PATH: "/mf-dashboard",
+    });
+
+    expect(metadata.manifest).toBe(
+      "https://dashboard.example.com/mf-dashboard/manifest.webmanifest",
+    );
+    expect(metadata.icons).toEqual({
+      icon: "https://dashboard.example.com/mf-dashboard/favicon.ico",
+      apple: "https://dashboard.example.com/mf-dashboard/apple-touch-icon.png",
+    });
   });
 });

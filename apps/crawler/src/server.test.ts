@@ -136,6 +136,35 @@ describe("crawler trigger server", () => {
     await vi.waitFor(() => expect(stopWatching).toHaveBeenCalledTimes(1));
   });
 
+  test("does not resend an unchanged state for repeated watcher notifications", async () => {
+    let notifyChange = () => {};
+    const baseUrl = await listen(
+      createCrawlerTriggerServer({
+        getState: async () => idleState,
+        watchState: async (onChange) => {
+          notifyChange = onChange;
+          return () => {};
+        },
+      }),
+    );
+
+    const res = await fetch(`${baseUrl}/events`, { headers: authorizationHeaders });
+    const reader = res.body!.getReader();
+    await reader.read();
+
+    for (let index = 0; index < 5; index += 1) {
+      notifyChange();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const noDuplicate = await Promise.race([
+      reader.read().then(() => false),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 50)),
+    ]);
+    expect(noDuplicate).toBe(true);
+    await reader.cancel();
+  });
+
   test("releases a watcher that finishes setup after the client disconnects", async () => {
     let finishWatching: ((stop: () => void) => void) | undefined;
     const stopWatching = vi.fn<() => void>();
